@@ -1,0 +1,7 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="192" height="192" rx="32" fill="#7c3aed"/>
+  <circle cx="96" cy="70" r="25" fill="#fbbf24"/>
+  <path d="M50 120h92l-8 24H58z" fill="#fbbf24"/>
+  <path d="M70 100l16 8 16-8 16 8v20l-16-8-16 8-16-8z" fill="#f59e0b"/>
+  <text x="96" y="155" text-anchor="middle" fill="white" font-family="Arial" font-size="14" font-weight="bold">CR</text>
+</svg>

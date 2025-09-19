@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Trophy, Coins, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import NotificationCenter from "@/components/notification-center";
+import InstallPrompt from "@/components/install-prompt";
 import { useEffect } from "react";
 import { notificationService } from "@/lib/notificationService";
 
@@ -34,12 +35,15 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
           </div>
           
           {/* Points Display */}
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2 bg-accent/10 px-4 py-2 rounded-lg border" data-testid="points-display">
               <Coins className="text-accent" size={20} />
               <span className="font-semibold text-lg">{user?.points?.toLocaleString() ?? 0}</span>
               <span className="text-muted-foreground text-sm">points</span>
             </div>
+            
+            {/* PWA Install Prompt */}
+            <InstallPrompt />
             
             {/* Notifications */}
             <NotificationCenter />
