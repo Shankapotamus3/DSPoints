@@ -22,6 +22,11 @@ export const chores = pgTable("chores", {
   isCompleted: boolean("is_completed").notNull().default(false),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  // Approval workflow fields
+  status: text("status").notNull().default("pending"), // 'pending', 'completed', 'approved', 'rejected'
+  approvedAt: timestamp("approved_at"),
+  approvedById: varchar("approved_by_id").references(() => users.id),
+  approvalComment: text("approval_comment"),
   // Recurring chore fields
   isRecurring: boolean("is_recurring").notNull().default(false),
   recurringType: text("recurring_type"), // 'daily', 'weekly', 'monthly'
@@ -48,6 +53,18 @@ export const transactions = pgTable("transactions", {
   description: text("description").notNull(),
   choreId: varchar("chore_id"),
   rewardId: varchar("reward_id"),
+  userId: varchar("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // 'chore_completed', 'chore_approved', 'chore_rejected'
+  isRead: boolean("is_read").notNull().default(false),
+  choreId: varchar("chore_id").references(() => chores.id),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
@@ -62,6 +79,9 @@ export const insertChoreSchema = createInsertSchema(chores).omit({
   completedAt: true,
   createdAt: true,
   nextDueDate: true,
+  status: true,
+  approvedAt: true,
+  approvedById: true,
 }).extend({
   recurringType: z.enum(['daily', 'weekly', 'monthly']).optional(),
 });
@@ -76,6 +96,15 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   createdAt: true,
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const choreApprovalSchema = z.object({
+  comment: z.string().optional(),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertChore = z.infer<typeof insertChoreSchema>;
@@ -84,3 +113,10 @@ export type InsertReward = z.infer<typeof insertRewardSchema>;
 export type Reward = typeof rewards.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Transaction = typeof transactions.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type ChoreApproval = z.infer<typeof choreApprovalSchema>;
+
+// Enum-like types for better type safety
+export type ChoreStatus = 'pending' | 'completed' | 'approved' | 'rejected';
+export type NotificationType = 'chore_completed' | 'chore_approved' | 'chore_rejected';

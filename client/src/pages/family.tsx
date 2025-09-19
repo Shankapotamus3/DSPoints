@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import AddFamilyMemberModal from "@/components/add-family-member-modal";
+// import AddFamilyMemberModal from "@/components/add-family-member-modal";
 import type { User } from "@shared/schema";
 
 export default function Family() {
@@ -79,7 +79,7 @@ export default function Family() {
                       {user.displayName || user.username}
                     </CardTitle>
                     {user.isAdmin && (
-                      <Crown className="text-amber-500" size={16} title="Admin" />
+                      <Crown className="text-amber-500" size={16} />
                     )}
                   </div>
                   {user.displayName && (
@@ -112,10 +112,10 @@ export default function Family() {
         )}
       </main>
 
-      <AddFamilyMemberModal 
+      {/* <AddFamilyMemberModal 
         open={showAddMember} 
         onClose={() => setShowAddMember(false)}
-      />
+      /> */}
     </>
   );
 }

@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, Coins, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import NotificationCenter from "@/components/notification-center";
+import { useEffect } from "react";
+import { notificationService } from "@/lib/notificationService";
 
 interface HeaderProps {
   theme: "light" | "dark";
@@ -10,7 +13,14 @@ interface HeaderProps {
 export default function Header({ theme, onToggleTheme }: HeaderProps) {
   const { data: user } = useQuery({
     queryKey: ["/api/user"],
-  }) as { data: { points: number } | undefined };
+  }) as { data: { points: number; isAdmin?: boolean } | undefined };
+
+  // Initialize notification service
+  useEffect(() => {
+    notificationService.startPolling();
+    // Request notification permission on first load
+    notificationService.requestPermission();
+  }, []);
 
   return (
     <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -30,6 +40,9 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
               <span className="font-semibold text-lg">{user?.points?.toLocaleString() ?? 0}</span>
               <span className="text-muted-foreground text-sm">points</span>
             </div>
+            
+            {/* Notifications */}
+            <NotificationCenter />
             
             {/* Theme Toggle */}
             <Button

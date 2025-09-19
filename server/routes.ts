@@ -1,11 +1,54 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema } from "@shared/schema";
+import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const USER_ID = "23391fd0-66f6-4e7b-bed1-1b71a93a6d9d"; // Default user for MVP
+
+  // Helper function to get current user from request (MVP: using default user)
+  // In production, this would extract user ID from session/JWT token
+  function getCurrentUserId(req: Request): string {
+    // For MVP, we use the default user, but in production this would be:
+    // return req.user?.id || req.session?.userId || req.headers.authorization
+    return USER_ID;
+  }
+
+  // Helper function to check admin permissions for requesting user
+  async function checkAdminPermission(req: Request): Promise<boolean> {
+    const currentUserId = getCurrentUserId(req);
+    const user = await storage.getUser(currentUserId);
+    return user?.isAdmin === true;
+  }
+
+  // Middleware to require admin access
+  async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const isAdmin = await checkAdminPermission(req);
+      if (!isAdmin) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      next();
+    } catch (error) {
+      res.status(500).json({ message: "Authentication error" });
+    }
+  }
+
+  // Helper function to send notifications
+  async function sendNotification(userId: string, title: string, message: string, type: string, choreId?: string) {
+    try {
+      await storage.createNotification({
+        userId,
+        title,
+        message,
+        type,
+        choreId
+      });
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+    }
+  }
 
   // Get current user with points
   app.get("/api/user", async (req, res) => {
@@ -117,26 +160,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Chore not found or already completed" });
       }
 
-      // Award points to assigned user (or default user if no assignment)
-      const userId = chore.assignedToId || USER_ID;
-      const user = await storage.getUser(userId);
-      if (user) {
-        const newPoints = user.points + chore.points;
-        await storage.updateUserPoints(userId, newPoints);
-        
-        // Create transaction record
-        await storage.createTransaction({
-          type: "earn",
-          amount: chore.points,
-          description: `Completed: ${chore.name}`,
-          choreId: chore.id,
-          rewardId: null,
-        });
+      // Send notification to admins about pending approval
+      const allUsers = await storage.getUsers();
+      const admins = allUsers.filter(user => user.isAdmin);
+      
+      for (const admin of admins) {
+        await sendNotification(
+          admin.id,
+          "Chore Completed - Pending Approval",
+          `${chore.name} has been completed and needs your approval`,
+          "chore_completed",
+          chore.id
+        );
       }
 
       res.json(chore);
     } catch (error) {
       res.status(500).json({ message: "Failed to complete chore" });
+    }
+  });
+
+  // Approval routes (admin only)
+  app.post("/api/chores/:id/approve", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { comment } = choreApprovalSchema.parse(req.body);
+      
+      const currentUserId = getCurrentUserId(req);
+
+      const chore = await storage.getChore(id);
+      if (!chore) {
+        return res.status(404).json({ message: "Chore not found" });
+      }
+
+      if (chore.status !== 'completed') {
+        return res.status(400).json({ message: "Chore must be completed before approval" });
+      }
+
+      // Approve the chore
+      const approvedChore = await storage.approveChore(id, currentUserId, comment);
+      if (!approvedChore) {
+        return res.status(500).json({ message: "Failed to approve chore" });
+      }
+
+      // Award points to assigned user (or default user if no assignment)
+      const userId = approvedChore.assignedToId || USER_ID;
+      const user = await storage.getUser(userId);
+      if (user) {
+        const newPoints = user.points + approvedChore.points;
+        await storage.updateUserPoints(userId, newPoints);
+        
+        // Create transaction record
+        await storage.createTransaction({
+          type: "earn",
+          amount: approvedChore.points,
+          description: `Approved: ${approvedChore.name}`,
+          choreId: approvedChore.id,
+          rewardId: null,
+          userId: userId,
+        });
+
+        // Send approval notification to the user who completed the chore
+        await sendNotification(
+          userId,
+          "Chore Approved! 🎉",
+          `Your completion of "${approvedChore.name}" has been approved. You earned ${approvedChore.points} points!`,
+          "chore_approved",
+          approvedChore.id
+        );
+      }
+
+      res.json(approvedChore);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid approval data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to approve chore" });
+    }
+  });
+
+  app.post("/api/chores/:id/reject", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { comment } = choreApprovalSchema.parse(req.body);
+      
+      const currentUserId = getCurrentUserId(req);
+
+      const chore = await storage.getChore(id);
+      if (!chore) {
+        return res.status(404).json({ message: "Chore not found" });
+      }
+
+      if (chore.status !== 'completed') {
+        return res.status(400).json({ message: "Chore must be completed before rejection" });
+      }
+
+      // Reject the chore
+      const rejectedChore = await storage.rejectChore(id, currentUserId, comment);
+      if (!rejectedChore) {
+        return res.status(500).json({ message: "Failed to reject chore" });
+      }
+
+      // Send rejection notification to the user who completed the chore
+      const userId = rejectedChore.assignedToId || USER_ID;
+      await sendNotification(
+        userId,
+        "Chore Rejected",
+        `Your completion of "${rejectedChore.name}" was rejected. ${comment ? `Reason: ${comment}` : 'Please try again.'}`,
+        "chore_rejected",
+        rejectedChore.id
+      );
+
+      res.json(rejectedChore);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid rejection data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to reject chore" });
+    }
+  });
+
+  // Get pending approval chores (admin only)
+  app.get("/api/chores/pending-approval", requireAdmin, async (req, res) => {
+    try {
+      const pendingChores = await storage.getPendingApprovalChores();
+      res.json(pendingChores);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get pending approval chores" });
+    }
+  });
+
+  // Notification routes
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const notifications = await storage.getNotifications(USER_ID);
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread", async (req, res) => {
+    try {
+      const notifications = await storage.getUnreadNotifications(USER_ID);
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get unread notifications" });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const notification = await storage.markNotificationAsRead(id);
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put("/api/notifications/mark-all-read", async (req, res) => {
+    try {
+      await storage.markAllNotificationsAsRead(USER_ID);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
     }
   });
 

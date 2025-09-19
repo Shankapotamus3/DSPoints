@@ -1,18 +1,21 @@
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { Check, Clock } from "lucide-react";
+import { Check, Clock, CheckCircle, XCircle, HelpCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Chore, User } from "@shared/schema";
+import type { Chore, User, ChoreStatus } from "@shared/schema";
 
 interface ChoreCardProps {
   chore: Chore;
-  onComplete?: (points: number, newBalance: number) => void;
+  onComplete?: () => void;
   showActions?: boolean;
   onEdit?: (chore: Chore) => void;
   onDelete?: (choreId: string) => void;
+  showApprovalActions?: boolean;
+  onApprove?: (choreId: string, points: number, newBalance: number) => void;
+  onReject?: (choreId: string) => void;
 }
 
 export default function ChoreCard({ 
@@ -20,7 +23,10 @@ export default function ChoreCard({
   onComplete, 
   showActions = true,
   onEdit,
-  onDelete 
+  onDelete,
+  showApprovalActions = false,
+  onApprove,
+  onReject
 }: ChoreCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -30,6 +36,41 @@ export default function ChoreCard({
   });
   
   const assignedUser = chore.assignedToId ? users.find(u => u.id === chore.assignedToId) : null;
+  
+  const getStatusBadge = (status: ChoreStatus) => {
+    switch (status) {
+      case 'pending':
+        return (
+          <Badge variant="secondary" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            <HelpCircle className="w-3 h-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      case 'completed':
+        return (
+          <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+            <AlertCircle className="w-3 h-3 mr-1" />
+            Awaiting Approval
+          </Badge>
+        );
+      case 'approved':
+        return (
+          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Approved
+          </Badge>
+        );
+      case 'rejected':
+        return (
+          <Badge variant="secondary" className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
+            <XCircle className="w-3 h-3 mr-1" />
+            Rejected
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
 
   const completeMutation = useMutation({
     mutationFn: async () => {
@@ -37,21 +78,15 @@ export default function ChoreCard({
       return response.json();
     },
     onSuccess: async () => {
-      // Invalidate and refetch user data to update balance throughout the app
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      // Invalidate and refetch data to update UI throughout the app
       queryClient.invalidateQueries({ queryKey: ["/api/chores"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       
-      // Get the updated user balance for the celebration callback
-      const userResponse = await queryClient.fetchQuery({
-        queryKey: ["/api/user"]
-      });
-      
-      onComplete?.(chore.points, (userResponse as any).points);
+      // Trigger completion celebration (not points celebration)
+      onComplete?.();
       
       toast({
-        title: "Chore Completed! 🎉",
-        description: `You earned ${chore.points} points!`,
+        title: "Chore Submitted! 📝",
+        description: "Your chore has been submitted for approval.",
       });
     },
     onError: () => {
@@ -118,6 +153,7 @@ export default function ChoreCard({
               <span className="mr-1">🪙</span>
               {chore.points}
             </Badge>
+            {getStatusBadge(chore.status)}
           </div>
         </div>
         
@@ -146,7 +182,8 @@ export default function ChoreCard({
             )}
           </div>
           
-          {showActions && !chore.isCompleted && (
+          {/* Regular actions for pending chores */}
+          {showActions && chore.status === 'pending' && (
             <div className="flex items-center space-x-2">
               {onEdit && (
                 <Button 
@@ -180,11 +217,63 @@ export default function ChoreCard({
               </Button>
             </div>
           )}
+
+          {/* Approval actions for completed chores (admin only) */}
+          {showApprovalActions && chore.status === 'completed' && (
+            <div className="flex items-center space-x-2">
+              <Button 
+                onClick={async () => {
+                  // Get current user data to calculate points celebration
+                  const userData = await queryClient.fetchQuery({ queryKey: ["/api/user"] });
+                  const currentBalance = (userData as any)?.points || 0;
+                  const newBalance = currentBalance + chore.points;
+                  onApprove?.(chore.id, chore.points, newBalance);
+                }}
+                variant="default"
+                size="sm"
+                className="bg-green-600 hover:bg-green-700"
+                data-testid={`button-approve-chore-${chore.id}`}
+              >
+                <CheckCircle className="mr-2" size={16} />
+                Approve
+              </Button>
+              <Button 
+                onClick={() => onReject?.(chore.id)}
+                variant="outline"
+                size="sm"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+                data-testid={`button-reject-chore-${chore.id}`}
+              >
+                <XCircle className="mr-2" size={16} />
+                Reject
+              </Button>
+            </div>
+          )}
           
-          {chore.isCompleted && (
-            <div className="flex items-center text-chart-1 text-sm font-medium">
-              <Check className="mr-2" size={14} />
-              Completed
+          {/* Status indicators */}
+          {chore.status === 'completed' && !showApprovalActions && (
+            <div className="flex items-center text-blue-600 text-sm font-medium">
+              <AlertCircle className="mr-2" size={14} />
+              Awaiting Approval
+            </div>
+          )}
+          
+          {chore.status === 'approved' && (
+            <div className="flex items-center text-green-600 text-sm font-medium">
+              <CheckCircle className="mr-2" size={14} />
+              Approved
+            </div>
+          )}
+          
+          {chore.status === 'rejected' && (
+            <div className="flex items-center text-red-600 text-sm font-medium">
+              <XCircle className="mr-2" size={14} />
+              Rejected
+              {chore.approvalComment && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({chore.approvalComment})
+                </span>
+              )}
             </div>
           )}
         </div>

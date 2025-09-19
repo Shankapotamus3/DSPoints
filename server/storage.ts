@@ -7,10 +7,14 @@ import {
   type InsertReward, 
   type Transaction, 
   type InsertTransaction,
+  type Notification,
+  type InsertNotification,
+  type ChoreStatus,
   users,
   chores,
   rewards,
-  transactions
+  transactions,
+  notifications
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
@@ -30,6 +34,10 @@ export interface IStorage {
   updateChore(id: string, updates: Partial<Chore>): Promise<Chore | undefined>;
   deleteChore(id: string): Promise<boolean>;
   completeChore(id: string): Promise<Chore | undefined>;
+  approveChore(id: string, approvedById: string, comment?: string): Promise<Chore | undefined>;
+  rejectChore(id: string, approvedById: string, comment?: string): Promise<Chore | undefined>;
+  getPendingApprovalChores(): Promise<Chore[]>;
+  getChoresByStatus(status: ChoreStatus): Promise<Chore[]>;
   resetRecurringChores(): Promise<void>;
   
   // Reward methods
@@ -42,6 +50,13 @@ export interface IStorage {
   // Transaction methods
   getTransactions(): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+
+  // Notification methods
+  getNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotifications(userId: string): Promise<Notification[]>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationAsRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -120,33 +135,71 @@ export class DatabaseStorage implements IStorage {
     const existingChore = await this.getChore(id);
     if (!existingChore) return undefined;
     
-    // Note: Point awarding handled in routes layer where USER_ID is available
-    
-    // For recurring chores, reset them instead of marking complete permanently
+    // For recurring chores, reset them and set status to completed (not award points yet)
     if (existingChore.isRecurring && existingChore.recurringType) {
       const nextDue = this.calculateNextDueDate(existingChore.recurringType as 'daily' | 'weekly' | 'monthly');
       const [chore] = await db
         .update(chores)
         .set({ 
-          isCompleted: false,  // Reset to incomplete
+          isCompleted: false,  // Reset to incomplete for next cycle
           completedAt: new Date(), // Track when it was completed
-          nextDueDate: nextDue
+          nextDueDate: nextDue,
+          status: 'completed' // Set to completed status for approval workflow
         })
         .where(eq(chores.id, id))
         .returning();
       return chore || undefined;
     } else {
-      // For one-time chores, mark as completed
+      // For one-time chores, set status to completed (not award points yet)
       const [chore] = await db
         .update(chores)
         .set({ 
-          isCompleted: true, 
-          completedAt: new Date() 
+          isCompleted: false, // Keep false until approved
+          completedAt: new Date(),
+          status: 'completed' // Set to completed status for approval workflow
         })
         .where(eq(chores.id, id))
         .returning();
       return chore || undefined;
     }
+  }
+
+  async approveChore(id: string, approvedById: string, comment?: string): Promise<Chore | undefined> {
+    const [chore] = await db
+      .update(chores)
+      .set({
+        status: 'approved',
+        approvedAt: new Date(),
+        approvedById: approvedById,
+        approvalComment: comment,
+        isCompleted: true // Finally mark as completed when approved
+      })
+      .where(eq(chores.id, id))
+      .returning();
+    return chore || undefined;
+  }
+
+  async rejectChore(id: string, approvedById: string, comment?: string): Promise<Chore | undefined> {
+    const [chore] = await db
+      .update(chores)
+      .set({
+        status: 'pending', // Reset to pending so it can be completed again
+        approvedAt: new Date(),
+        approvedById: approvedById,
+        approvalComment: comment,
+        isCompleted: false // Keep as incomplete when rejected
+      })
+      .where(eq(chores.id, id))
+      .returning();
+    return chore || undefined;
+  }
+
+  async getPendingApprovalChores(): Promise<Chore[]> {
+    return await db.select().from(chores).where(eq(chores.status, 'completed'));
+  }
+
+  async getChoresByStatus(status: ChoreStatus): Promise<Chore[]> {
+    return await db.select().from(chores).where(eq(chores.status, status));
   }
 
   // Reward methods
@@ -192,6 +245,43 @@ export class DatabaseStorage implements IStorage {
       .values(insertTransaction)
       .returning();
     return transaction;
+  }
+
+  // Notification methods
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(sql`created_at DESC`);
+  }
+
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(sql`user_id = ${userId} AND is_read = false`)
+      .orderBy(sql`created_at DESC`);
+  }
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db
+      .insert(notifications)
+      .values(insertNotification)
+      .returning();
+    return notification;
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification | undefined> {
+    const [notification] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return notification || undefined;
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId));
   }
   
   async resetRecurringChores(): Promise<void> {
