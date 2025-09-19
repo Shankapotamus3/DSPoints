@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema } from "@shared/schema";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -29,6 +30,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
+      next();
+    } catch (error) {
+      res.status(500).json({ message: "Authentication error" });
+    }
+  }
+
+  // Middleware to require owner or admin access for user-specific operations
+  async function requireOwnerOrAdmin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const currentUserId = getCurrentUserId(req);
+      const targetUserId = req.params.id;
+      
+      // Check if current user is the owner or an admin
+      const isOwner = currentUserId === targetUserId;
+      const isAdmin = await checkAdminPermission(req);
+      
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ message: "Access denied. Only the user or an admin can perform this action." });
+      }
+      
       next();
     } catch (error) {
       res.status(500).json({ message: "Authentication error" });
@@ -70,6 +91,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(users);
     } catch (error) {
       res.status(500).json({ message: "Failed to get users" });
+    }
+  });
+
+  // Update user profile
+  app.put("/api/users/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertUserSchema.partial().omit({ password: true }).parse(req.body);
+      
+      const user = await storage.updateUser(id, updates);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update user" });
     }
   });
 
@@ -430,6 +471,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(transactions);
     } catch (error) {
       res.status(500).json({ message: "Failed to get transactions" });
+    }
+  });
+
+  // Avatar upload routes using object storage integration blueprint
+  
+  // REMOVED INSECURE GENERIC ENDPOINT: Generic avatar upload endpoint removed for security.
+  // All avatar uploads must now go through user-specific endpoints with authentication.
+  app.post("/api/avatar-upload", (req, res) => {
+    res.status(404).json({ 
+      message: "This endpoint has been removed for security. Use /api/users/:id/avatar-upload instead." 
+    });
+  });
+  
+  // Serve private objects (avatars) with proper access control
+  app.get("/objects/:objectPath(*)", async (req, res) => {
+    const objectStorageService = new ObjectStorageService();
+    try {
+      // Get the current user for access control
+      const currentUserId = getCurrentUserId(req);
+      
+      // Get the object file
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      
+      // Check if user can access this object (with proper ACL enforcement)
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        userId: currentUserId,
+        objectFile: objectFile,
+        requestedPermission: undefined // defaults to READ permission
+      });
+      
+      if (!canAccess) {
+        return res.status(403).json({ message: "Access denied to this object" });
+      }
+      
+      // Serve the object with appropriate caching
+      await objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error serving object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Get upload URL for avatar image (requires owner or admin access)
+  app.post("/api/users/:id/avatar-upload", requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Verify user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      // Use user-scoped upload URL for security
+      const uploadURL = await objectStorageService.getUserScopedAvatarUploadURL(id);
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Error getting avatar upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Update user avatar after upload (requires owner or admin access)
+  app.put("/api/users/:id/avatar", requireOwnerOrAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { avatarUrl } = req.body;
+
+      if (!avatarUrl) {
+        return res.status(400).json({ message: "avatarUrl is required" });
+      }
+
+      // Input validation for avatarUrl format
+      try {
+        insertUserSchema.pick({ avatarUrl: true }).parse({ avatarUrl });
+      } catch (validationError) {
+        return res.status(400).json({ 
+          message: "Invalid avatar URL format",
+          errors: validationError instanceof z.ZodError ? validationError.errors : []
+        });
+      }
+
+      // Verify user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      
+      // SECURITY: Validate that the avatar URL belongs to this user
+      const isValidOwnership = objectStorageService.validateAvatarUrlOwnership(avatarUrl, id);
+      if (!isValidOwnership) {
+        return res.status(403).json({ 
+          message: "Avatar URL does not belong to this user. Upload URLs must be obtained through the proper avatar-upload endpoint." 
+        });
+      }
+      
+      // Set ACL policy to make avatar public (family members can view each other's avatars)
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        avatarUrl,
+        {
+          owner: id, // User owns their avatar
+          visibility: "public", // Public so all family members can view
+        }
+      );
+
+      // Update user with new avatar settings
+      const updatedUser = await storage.updateUser(id, {
+        avatarType: "image",
+        avatarUrl: objectPath,
+      });
+
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user avatar" });
+      }
+
+      res.json({ 
+        objectPath: objectPath,
+        user: updatedUser
+      });
+    } catch (error) {
+      console.error("Error updating user avatar:", error);
+      res.status(500).json({ message: "Failed to update avatar" });
     }
   });
 

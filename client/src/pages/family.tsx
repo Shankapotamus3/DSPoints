@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Users, UserCircle, Crown } from "lucide-react";
+import { Plus, Users, UserCircle, Crown, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AddFamilyMemberModal from "@/components/add-family-member-modal";
+import EditProfileModal from "@/components/edit-profile-modal";
 import type { User } from "@shared/schema";
 
 export default function Family() {
   const [showAddMember, setShowAddMember] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -89,6 +91,13 @@ export default function Family() {
                 <CardContent className="text-center">
                   <div className="mb-4">
                     <Avatar className="w-16 h-16 mx-auto text-2xl">
+                      {user.avatarType === "image" && user.avatarUrl ? (
+                        <AvatarImage 
+                          src={user.avatarUrl} 
+                          alt={`${user.displayName || user.username}'s avatar`}
+                          className="object-cover"
+                        />
+                      ) : null}
                       <AvatarFallback>{user.avatar}</AvatarFallback>
                     </Avatar>
                   </div>
@@ -104,6 +113,17 @@ export default function Family() {
                       <UserCircle size={12} />
                       <span>Member since creation</span>
                     </div>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setEditingUser(user)}
+                      data-testid={`button-edit-user-${user.id}`}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Profile
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -116,6 +136,14 @@ export default function Family() {
         open={showAddMember} 
         onClose={() => setShowAddMember(false)}
       />
+      
+      {editingUser && (
+        <EditProfileModal
+          open={!!editingUser}
+          onClose={() => setEditingUser(null)}
+          user={editingUser}
+        />
+      )}
     </>
   );
 }

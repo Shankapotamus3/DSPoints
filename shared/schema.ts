@@ -10,6 +10,8 @@ export const users = pgTable("users", {
   points: integer("points").notNull().default(0),
   displayName: text("display_name"),
   avatar: text("avatar").default("👤"),
+  avatarType: text("avatar_type").notNull().default("emoji"), // 'emoji' or 'image'
+  avatarUrl: text("avatar_url"), // URL for uploaded images
   isAdmin: boolean("is_admin").notNull().default(false),
 });
 
@@ -71,6 +73,15 @@ export const notifications = pgTable("notifications", {
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   points: true,
+}).extend({
+  avatarType: z.enum(['emoji', 'image']).optional(),
+  avatarUrl: z.string().url().optional().refine((url) => {
+    if (!url) return true; // Allow empty/undefined
+    // Must be a valid URL that starts with /objects/ (internal path) or https://storage.googleapis.com/
+    return url.startsWith('/objects/') || url.startsWith('https://storage.googleapis.com/');
+  }, {
+    message: 'Avatar URL must be a valid object storage URL'
+  }),
 });
 
 export const insertChoreSchema = createInsertSchema(chores).omit({
@@ -120,3 +131,4 @@ export type ChoreApproval = z.infer<typeof choreApprovalSchema>;
 // Enum-like types for better type safety
 export type ChoreStatus = 'pending' | 'completed' | 'approved' | 'rejected';
 export type NotificationType = 'chore_completed' | 'chore_approved' | 'chore_rejected';
+export type AvatarType = 'emoji' | 'image';

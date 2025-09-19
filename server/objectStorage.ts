@@ -154,6 +154,33 @@ export class ObjectStorageService {
     });
   }
 
+  // Gets a user-scoped upload URL for avatar images
+  async getUserScopedAvatarUploadURL(userId: string): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error(
+        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
+          "tool and set PRIVATE_OBJECT_DIR env var."
+      );
+    }
+
+    const avatarId = randomUUID();
+    // Create user-scoped path: /private/<userId>/avatars/<uuid>
+    const fullPath = `${privateObjectDir}/${userId}/avatars/${avatarId}`;
+
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    // Sign URL for PUT method with TTL and content-type restrictions for security
+    return signObjectURL({
+      bucketName,
+      objectName,
+      method: "PUT",
+      ttlSec: 900,
+      contentType: "image/*", // Restrict to images only
+      maxFileSize: 10485760, // 10MB max file size
+    });
+  }
+
   // Gets the object entity file from the object path.
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {
@@ -237,6 +264,31 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  // Validates that an avatar URL belongs to the specified user
+  validateAvatarUrlOwnership(avatarUrl: string, expectedUserId: string): boolean {
+    try {
+      const normalizedPath = this.normalizeObjectEntityPath(avatarUrl);
+      if (!normalizedPath.startsWith("/objects/")) {
+        return false;
+      }
+      
+      // Extract the entity path: /objects/<userId>/avatars/<uuid>
+      const entityPath = normalizedPath.substring(9); // Remove "/objects/"
+      const pathParts = entityPath.split("/");
+      
+      // Should be: <userId>/avatars/<uuid>
+      if (pathParts.length !== 3 || pathParts[1] !== "avatars") {
+        return false;
+      }
+      
+      const userIdFromPath = pathParts[0];
+      return userIdFromPath === expectedUserId;
+    } catch (error) {
+      console.error("Error validating avatar URL ownership:", error);
+      return false;
+    }
+  }
 }
 
 function parseObjectPath(path: string): {
@@ -265,18 +317,33 @@ async function signObjectURL({
   objectName,
   method,
   ttlSec,
+  contentType,
+  maxFileSize,
 }: {
   bucketName: string;
   objectName: string;
   method: "GET" | "PUT" | "DELETE" | "HEAD";
   ttlSec: number;
+  contentType?: string;
+  maxFileSize?: number;
 }): Promise<string> {
-  const request = {
+  const request: any = {
     bucket_name: bucketName,
     object_name: objectName,
     method,
     expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
   };
+
+  // Add security conditions for PUT requests
+  if (method === "PUT" && (contentType || maxFileSize)) {
+    request.conditions = [];
+    if (contentType) {
+      request.conditions.push(["starts-with", "$content-type", contentType.replace("*", "")]);
+    }
+    if (maxFileSize) {
+      request.conditions.push(["content-length-range", 0, maxFileSize]);
+    }
+  }
   const response = await fetch(
     `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
     {

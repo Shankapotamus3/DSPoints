@@ -153,7 +153,7 @@ export default function ChoreCard({
               <span className="mr-1">🪙</span>
               {chore.points}
             </Badge>
-            {getStatusBadge(chore.status)}
+            {getStatusBadge(chore.status as ChoreStatus)}
           </div>
         </div>
         
@@ -175,9 +175,18 @@ export default function ChoreCard({
             )}
             {assignedUser && (
               <div className="flex items-center text-muted-foreground text-sm">
-                <span className="text-xs bg-accent/10 text-accent px-2 py-1 rounded-full">
-                  {assignedUser.avatar} {assignedUser.displayName || assignedUser.username}
-                </span>
+                <div className="flex items-center space-x-2 text-xs bg-accent/10 text-accent px-2 py-1 rounded-full">
+                  {assignedUser.avatarType === "image" && assignedUser.avatarUrl ? (
+                    <img 
+                      src={assignedUser.avatarUrl} 
+                      alt={`${assignedUser.displayName || assignedUser.username}'s avatar`}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span>{assignedUser.avatar}</span>
+                  )}
+                  <span>{assignedUser.displayName || assignedUser.username}</span>
+                </div>
               </div>
             )}
           </div>

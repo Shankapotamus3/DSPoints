@@ -4,18 +4,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import type { InsertUser } from "@shared/schema";
+import type { User } from "@shared/schema";
 import type { UploadResult } from "@uppy/core";
 
-interface AddFamilyMemberModalProps {
+interface EditProfileModalProps {
   open: boolean;
   onClose: () => void;
+  user: User;
 }
 
 const AVATAR_OPTIONS = [
@@ -24,62 +24,50 @@ const AVATAR_OPTIONS = [
   "👨‍💻", "👩‍💻", "👨‍🎨", "👩‍🎨", "👨‍🚀", "👩‍🚀"
 ];
 
-export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberModalProps) {
+export default function EditProfileModal({ open, onClose, user }: EditProfileModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const [formData, setFormData] = useState<Omit<InsertUser, 'password' | 'isAdmin'>>({
-    username: "",
-    displayName: "",
-    avatar: "👤",
-    avatarType: "emoji",
-    avatarUrl: undefined,
+  const [formData, setFormData] = useState({
+    displayName: user.displayName || "",
+    avatar: user.avatar,
+    avatarType: user.avatarType || "emoji",
+    avatarUrl: user.avatarUrl,
   });
   
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  const [avatarTab, setAvatarTab] = useState<"emoji" | "upload">("emoji");
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(
+    user.avatarType === "image" && user.avatarUrl ? user.avatarUrl : null
+  );
+  const [avatarTab, setAvatarTab] = useState<"emoji" | "upload">(
+    user.avatarType === "image" ? "upload" : "emoji"
+  );
   
-  const createMutation = useMutation({
-    mutationFn: async (data: Omit<InsertUser, 'password' | 'isAdmin'>) => {
-      // Create the user first with emoji avatar (images will be handled after user creation)
-      const userData = {
-        ...data,
-        avatarType: "emoji", // Always start with emoji, image will be updated later
-        avatarUrl: undefined
-      };
-      const response = await apiRequest("POST", "/api/users", userData);
-      const user = await response.json();
-      
-      // If user selected an image avatar, handle it after user creation
-      if (data.avatarType === "image" && data.avatarUrl) {
-        try {
-          // Now we can use the user-specific endpoint since user exists
-          await apiRequest("PUT", `/api/users/${user.id}/avatar`, {
-            avatarUrl: data.avatarUrl
-          });
-          // Update the returned user object to reflect the image avatar
-          user.avatarType = "image";
-          user.avatarUrl = data.avatarUrl;
-        } catch (error) {
-          console.error("Failed to set avatar:", error);
-          throw new Error("User created but avatar upload failed. Please edit the user's profile to set their avatar.");
-        }
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Partial<User>) => {
+      // If uploading a new image, handle avatar URL update
+      if (updates.avatarType === "image" && updates.avatarUrl) {
+        await apiRequest("PUT", `/api/users/${user.id}/avatar`, {
+          avatarUrl: updates.avatarUrl
+        });
+      } else {
+        // Just update user fields
+        const response = await apiRequest("PUT", `/api/users/${user.id}`, updates);
+        return response.json();
       }
-      
-      return user;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       toast({
-        title: "Family Member Added",
-        description: "New family member has been added successfully!",
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully!",
       });
       handleClose();
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to add family member",
+        description: error.message || "Failed to update profile",
         variant: "destructive",
       });
     },
@@ -87,66 +75,42 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.username.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Username is required",
-        variant: "destructive",
-      });
-      return;
-    }
-    createMutation.mutate(formData);
+    updateMutation.mutate(formData);
   };
 
   const handleClose = () => {
     setFormData({
-      username: "",
-      displayName: "",
-      avatar: "👤",
-      avatarType: "emoji",
-      avatarUrl: undefined,
+      displayName: user.displayName || "",
+      avatar: user.avatar,
+      avatarType: user.avatarType || "emoji",
+      avatarUrl: user.avatarUrl,
     });
-    setUploadedImageUrl(null);
-    setAvatarTab("emoji");
+    setUploadedImageUrl(user.avatarType === "image" && user.avatarUrl ? user.avatarUrl : null);
+    setAvatarTab(user.avatarType === "image" ? "upload" : "emoji");
     onClose();
   };
 
-  const isLoading = createMutation.isPending;
+  const isLoading = updateMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Family Member</DialogTitle>
+          <DialogTitle>Edit Profile</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="username">Username *</Label>
-            <Input
-              id="username"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              placeholder="Enter username"
-              required
-              data-testid="input-username"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Used for identification and must be unique
-            </p>
-          </div>
-          
-          <div>
             <Label htmlFor="displayName">Display Name</Label>
             <Input
               id="displayName"
-              value={formData.displayName || ""}
+              value={formData.displayName}
               onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
               placeholder="Enter display name (optional)"
-              data-testid="input-display-name"
+              data-testid="input-edit-display-name"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Friendly name shown in the app (optional)
+              Friendly name shown in the app
             </p>
           </div>
           
@@ -155,15 +119,15 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
             <Label>Avatar</Label>
             <Tabs value={avatarTab} onValueChange={(value) => setAvatarTab(value as "emoji" | "upload")} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="emoji" data-testid="tab-emoji-avatar">Emoji</TabsTrigger>
-                <TabsTrigger value="upload" data-testid="tab-upload-avatar">Upload Image</TabsTrigger>
+                <TabsTrigger value="emoji" data-testid="tab-edit-emoji-avatar">Emoji</TabsTrigger>
+                <TabsTrigger value="upload" data-testid="tab-edit-upload-avatar">Upload Image</TabsTrigger>
               </TabsList>
               
               <div className="space-y-3 mt-3">
                 <div className="flex items-center justify-center">
                   <Avatar className="w-16 h-16 text-2xl border-2 border-border">
                     {formData.avatarType === "image" && uploadedImageUrl ? (
-                      <AvatarImage src={uploadedImageUrl} alt="Uploaded avatar" />
+                      <AvatarImage src={uploadedImageUrl} alt="Profile avatar" className="object-cover" />
                     ) : (
                       <AvatarFallback>{formData.avatar}</AvatarFallback>
                     )}
@@ -181,7 +145,7 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
                             ...formData, 
                             avatar, 
                             avatarType: "emoji",
-                            avatarUrl: undefined 
+                            avatarUrl: null 
                           });
                           setUploadedImageUrl(null);
                         }}
@@ -190,7 +154,7 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
                             ? "border-primary bg-accent" 
                             : "border-border"
                         }`}
-                        data-testid={`button-avatar-${avatar}`}
+                        data-testid={`button-edit-avatar-${avatar}`}
                       >
                         {avatar}
                       </button>
@@ -204,9 +168,12 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
                       maxNumberOfFiles={1}
                       maxFileSize={5242880} // 5MB limit for avatars
                       onGetUploadParameters={async () => {
-                        // For new users, we need to create a temporary user first or use a different approach
-                        // Since we removed the generic endpoint for security, we'll store the image and set it after user creation
-                        throw new Error("Please create the family member first, then edit their profile to add an avatar image.");
+                        const response = await apiRequest("POST", `/api/users/${user.id}/avatar-upload`);
+                        const data = await response.json();
+                        return {
+                          method: "PUT" as const,
+                          url: data.uploadURL,
+                        };
                       }}
                       onComplete={(result) => {
                         if (result.successful && result.successful.length > 0) {
@@ -229,7 +196,7 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
                     >
                       <div className="flex items-center justify-center gap-2">
                         <span>📷</span>
-                        <span>Upload Avatar Image</span>
+                        <span>Upload New Avatar</span>
                       </div>
                     </ObjectUploader>
                     <p className="text-xs text-muted-foreground mt-2">
@@ -247,7 +214,7 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
               variant="outline" 
               className="flex-1"
               onClick={handleClose}
-              data-testid="button-cancel-family-member"
+              data-testid="button-cancel-edit-profile"
             >
               Cancel
             </Button>
@@ -255,9 +222,9 @@ export default function AddFamilyMemberModal({ open, onClose }: AddFamilyMemberM
               type="submit" 
               className="flex-1"
               disabled={isLoading}
-              data-testid="button-submit-family-member"
+              data-testid="button-save-profile"
             >
-              {isLoading ? "Adding..." : "Add Family Member"}
+              {isLoading ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </form>
