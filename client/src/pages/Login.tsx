@@ -24,6 +24,7 @@ export default function Login() {
   const [selectedUser, setSelectedUser] = useState<LoginUser | null>(null);
   const [pin, setPin] = useState("");
   const [showError, setShowError] = useState(false);
+  const [useKeyboard, setUseKeyboard] = useState(false);
 
   // Fetch all users for login selection
   const { data: users, isLoading } = useQuery<LoginUser[]>({
@@ -119,6 +120,7 @@ export default function Login() {
                     return;
                   }
                   setSelectedUser(user);
+                  setUseKeyboard(false);
                 }}
                 className="flex flex-col items-center gap-3 p-4 rounded-2xl hover:bg-[hsl(220,15%,97%)] transition-all hover:scale-105 active:scale-95"
                 data-testid={`button-select-user-${user.id}`}
@@ -158,10 +160,15 @@ export default function Login() {
             {/* PIN Display with hidden input for keyboard support */}
             <div className="relative">
               <div 
-                className={`h-16 rounded-2xl bg-[hsl(220,15%,97%)] border-2 flex items-center justify-center ${
+                className={`h-16 rounded-2xl bg-[hsl(220,15%,97%)] border-2 flex items-center justify-center cursor-pointer ${
                   showError ? 'border-[hsl(0,75%,60%)] animate-shake' : 'border-[hsl(220,15%,90%)]'
                 }`}
-                onClick={() => document.getElementById('pin-input-field')?.focus()}
+                onClick={() => {
+                  setUseKeyboard(true);
+                  setTimeout(() => {
+                    document.getElementById('pin-input-field')?.focus();
+                  }, 0);
+                }}
               >
                 <div className="flex gap-3 text-3xl tracking-widest pointer-events-none" style={{ fontFamily: 'Fredoka, sans-serif' }}>
                   {[...Array(6)].map((_, i) => (
@@ -171,29 +178,28 @@ export default function Login() {
                   ))}
                 </div>
               </div>
-              {/* Hidden input for keyboard/numeric input */}
-              <input
-                id="pin-input-field"
-                type="tel"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '');
-                  setPin(value);
-                }}
-                onFocus={(e) => {
-                  // Ensure mobile keyboards show numeric keypad
-                  e.target.setAttribute('type', 'tel');
-                }}
-                className="absolute top-0 left-0 w-full h-full opacity-0 text-transparent bg-transparent border-none outline-none cursor-text"
-                style={{ caretColor: 'transparent' }}
-                placeholder=""
-                autoComplete="off"
-                autoFocus
-                data-testid="input-pin-hidden"
-              />
+              {/* Hidden input for keyboard/numeric input - only enabled when keyboard mode active */}
+              {useKeyboard && (
+                <input
+                  id="pin-input-field"
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '');
+                    setPin(value);
+                  }}
+                  onBlur={() => setUseKeyboard(false)}
+                  className="absolute top-0 left-0 w-full h-full opacity-0 text-transparent bg-transparent border-none outline-none cursor-text"
+                  style={{ caretColor: 'transparent' }}
+                  placeholder=""
+                  autoComplete="off"
+                  autoFocus
+                  data-testid="input-pin-hidden"
+                />
+              )}
             </div>
 
             {/* Number Pad */}
@@ -241,6 +247,7 @@ export default function Login() {
                 onClick={() => {
                   setSelectedUser(null);
                   setPin("");
+                  setUseKeyboard(false);
                 }}
                 disabled={loginMutation.isPending}
                 className="text-[hsl(230,15%,45%)]"
