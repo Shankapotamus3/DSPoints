@@ -2,7 +2,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Register service worker for PWA functionality
+// TEMPORARILY DISABLED: Register service worker for PWA functionality
+// The service worker is caching auth responses, preventing login from working
+// TODO: Re-enable after fixing auth caching issues
+/*
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
@@ -45,5 +48,7 @@ if ('serviceWorker' in navigator) {
 } else {
   console.warn('PWA: Service Worker not supported in this browser');
 }
+*/
+console.log('Service Worker temporarily disabled for debugging');
 
 createRoot(document.getElementById("root")!).render(<App />);
