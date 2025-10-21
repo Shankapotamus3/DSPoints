@@ -33,14 +33,20 @@ export default function Login() {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async ({ userId, pin }: { userId: string; pin: string }) => {
+      console.log("Login attempt for userId:", userId);
       const response = await apiRequest("POST", "/api/auth/login", { userId, pin });
+      console.log("Login response status:", response.status);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Login failed");
       }
-      return response.json();
+      const data = await response.json();
+      console.log("Login successful, data:", data);
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Login onSuccess called with data:", data);
+      
       // Clear any cached user query errors before redirecting
       queryClient.removeQueries({ queryKey: ["/api/user"] });
       
@@ -50,8 +56,10 @@ export default function Login() {
         description: "You've successfully logged in!",
       });
       
+      console.log("About to redirect to /");
       // Redirect using router
       setLocation("/");
+      console.log("setLocation called");
     },
     onError: (error: any) => {
       setShowError(true);
