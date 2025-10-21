@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star, Delete } from "lucide-react";
 
@@ -34,14 +34,25 @@ export default function Login() {
   const loginMutation = useMutation({
     mutationFn: async ({ userId, pin }: { userId: string; pin: string }) => {
       const response = await apiRequest("POST", "/api/auth/login", { userId, pin });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Login failed");
+      }
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate user query to refresh authentication state
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      
       toast({
         title: "Welcome back! 🎉",
         description: "You've successfully logged in!",
       });
-      setLocation("/");
+      
+      // Redirect to home after a short delay to ensure query is refetched
+      setTimeout(() => {
+        setLocation("/");
+      }, 100);
     },
     onError: (error: any) => {
       setShowError(true);
