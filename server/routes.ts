@@ -17,78 +17,10 @@ declare module 'express-session' {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // CRITICAL: Serve Service Worker reset script with no-cache headers
-  // This fixes the issue where browsers cache the old Service Worker indefinitely
-  const swResetScript = `
-// Service Worker Reset Script - Forces unregistration and cache clearing
-self.addEventListener('install', (event) => {
-  console.log('[SW Reset] Installing and forcing immediate activation...');
-  event.waitUntil(self.skipWaiting());
-});
-
-self.addEventListener('activate', (event) => {
-  console.log('[SW Reset] Activating - clearing all caches and unregistering...');
-  event.waitUntil(
-    Promise.all([
-      // Clear all caches
-      caches.keys().then(cacheNames => {
-        return Promise.all(
-          cacheNames.map(cacheName => {
-            console.log('[SW Reset] Deleting cache:', cacheName);
-            return caches.delete(cacheName);
-          })
-        );
-      }),
-      // Take control of all clients
-      self.clients.claim()
-    ]).then(() => {
-      console.log('[SW Reset] Caches cleared, unregistering service worker...');
-      return self.registration.unregister();
-    }).then(() => {
-      console.log('[SW Reset] Service worker unregistered successfully');
-      // Notify all clients to reload
-      return self.clients.matchAll();
-    }).then(clients => {
-      clients.forEach(client => {
-        client.postMessage({ type: 'SW_RESET_COMPLETE' });
-      });
-    })
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  // Don't intercept any requests during reset
-  return;
-});
-`;
-
-  // Serve reset script with no-cache headers
-  app.get('/sw-reset.js', (req, res) => {
-    res.set({
-      'Content-Type': 'application/javascript',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    });
-    res.send(swResetScript);
-  });
-
-  // Also serve /sw.js as the reset script to override any cached version
-  app.get('/sw.js', (req, res) => {
-    res.set({
-      'Content-Type': 'application/javascript',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    });
-    res.send(swResetScript);
-  });
-
   // Setup session store - use PostgreSQL if available, otherwise fall back to memory store
   let sessionStore;
   
   if (process.env.DATABASE_URL) {
-    console.log("[Session] Using PostgreSQL session store");
     const PgSession = connectPgSimple(session);
     sessionStore = new PgSession({
       conObject: {
@@ -97,18 +29,10 @@ self.addEventListener('fetch', (event) => {
       tableName: "session",
       createTableIfMissing: true,
     });
-    
-    // Test the store connection
-    sessionStore.on('error', (error: any) => {
-      console.error("[Session] Store error:", error);
-    });
-  } else {
-    console.log("[Session] No DATABASE_URL, session store will be memory-based");
   }
   
   app.use(
     session({
-      name: 'choreapp.sid', // Explicit cookie name
       store: sessionStore,
       secret: process.env.SESSION_SECRET || "chore-rewards-secret-key",
       resave: false,
@@ -116,45 +40,15 @@ self.addEventListener('fetch', (event) => {
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         httpOnly: true,
-        secure: false, // Disable secure for development to ensure cookies work
-        sameSite: "lax",
-        path: '/', // Explicitly set path
+        secure: process.env.NODE_ENV === "production",
       },
     })
   );
-  
-  console.log("[Session] Session middleware configured");
 
   // Helper function to hash PIN/password
   function hashPassword(password: string): string {
     return crypto.createHash('sha256').update(password).digest('hex');
   }
-
-  // Initialize default admin user if no users exist
-  async function initializeDefaultAdmin() {
-    try {
-      const existingUsers = await storage.getUsers();
-      if (existingUsers.length === 0) {
-        console.log("No users found. Creating default admin user...");
-        await storage.createUser({
-          username: "admin",
-          password: hashPassword("admin"),
-          pin: hashPassword("1234"),
-          displayName: "Admin",
-          avatar: "👑",
-          avatarType: "emoji",
-          isAdmin: true,
-        });
-        console.log("Default admin user created successfully!");
-        console.log("Username: admin | PIN: 1234");
-      }
-    } catch (error) {
-      console.error("Failed to initialize default admin:", error);
-    }
-  }
-
-  // Initialize default admin on startup
-  await initializeDefaultAdmin();
 
   // Helper function to get current user from request
   function getCurrentUserId(req: Request): string | null {
@@ -163,10 +57,6 @@ self.addEventListener('fetch', (event) => {
 
   // Middleware to require authentication
   function requireAuth(req: Request, res: Response, next: NextFunction) {
-    console.log("[requireAuth] Session ID:", req.sessionID);
-    console.log("[requireAuth] Session userId:", req.session.userId);
-    console.log("[requireAuth] Cookies:", req.headers.cookie);
-    
     if (!req.session.userId) {
       return res.status(401).json({ message: "Authentication required" });
     }
@@ -276,45 +166,21 @@ self.addEventListener('fetch', (event) => {
         return res.status(401).json({ message: "Invalid PIN" });
       }
 
-      // Set session and explicitly save it
+      // Set session
       req.session.userId = user.id;
       
-      console.log("[Login] Session object BEFORE save:", {
-        sessionID: req.sessionID,
-        userId: req.session.userId,
-        cookie: req.session.cookie
-      });
-      
-      // Explicitly save session before responding
-      req.session.save((err) => {
-        if (err) {
-          console.error("[Login] Session save error:", err);
-          return res.status(500).json({ message: "Failed to save session" });
+      res.json({ 
+        message: "Login successful",
+        user: {
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          avatar: user.avatar,
+          avatarType: user.avatarType,
+          avatarUrl: user.avatarUrl,
+          points: user.points,
+          isAdmin: user.isAdmin,
         }
-        
-        console.log("[Login] Session saved successfully!");
-        console.log("[Login] Session object AFTER save:", {
-          sessionID: req.sessionID,
-          userId: req.session.userId,
-          cookie: req.session.cookie
-        });
-        console.log("[Login] Response header 'Set-Cookie':", res.getHeader('Set-Cookie'));
-        
-        res.json({ 
-          message: "Login successful",
-          user: {
-            id: user.id,
-            username: user.username,
-            displayName: user.displayName,
-            avatar: user.avatar,
-            avatarType: user.avatarType,
-            avatarUrl: user.avatarUrl,
-            points: user.points,
-            isAdmin: user.isAdmin,
-          }
-        });
-        
-        console.log("[Login] Response sent. Final 'Set-Cookie' header:", res.getHeader('Set-Cookie'));
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -335,10 +201,6 @@ self.addEventListener('fetch', (event) => {
   // Get current user with points (requires authentication)
   app.get("/api/user", requireAuth, async (req, res) => {
     try {
-      console.log("[/api/user] Session ID:", req.sessionID);
-      console.log("[/api/user] Session data:", req.session);
-      console.log("[/api/user] Cookies:", req.headers.cookie);
-      
       const userId = getCurrentUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });

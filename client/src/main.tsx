@@ -2,33 +2,48 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Register the Service Worker reset script to clear cached version
+// Register service worker for PWA functionality
 if ('serviceWorker' in navigator) {
-  console.log('[App] Registering Service Worker reset script...');
-  
-  // Listen for completion message
-  navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SW_RESET_COMPLETE') {
-      console.log('[App] Service Worker reset complete - reloading page...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-    }
-  });
-  
-  // Register the reset script (this will override any cached Service Worker)
-  navigator.serviceWorker.register('/sw-reset.js?v=' + Date.now(), {
-    updateViaCache: 'none'
-  }).then((registration) => {
-    console.log('[App] Reset script registered successfully');
-    
-    // Force update to bypass any caching
-    registration.update();
-  }).catch((error) => {
-    console.error('[App] Failed to register reset script:', error);
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        console.log('PWA: Service Worker registered successfully');
+        
+        // Handle service worker updates
+        registration.addEventListener('updatefound', () => {
+          console.log('PWA: New service worker version found');
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed') {
+                if (navigator.serviceWorker.controller) {
+                  // New version available
+                  console.log('PWA: New version available, ready to update');
+                  if (confirm('A new version of ChoreRewards is available. Update now?')) {
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    window.location.reload();
+                  }
+                } else {
+                  // First time installation
+                  console.log('PWA: App cached for offline use');
+                }
+              }
+            });
+          }
+        });
+      })
+      .catch((registrationError) => {
+        console.error('PWA: Service Worker registration failed:', registrationError);
+      });
+
+    // Listen for service worker controller changes (updates)
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      console.log('PWA: Service Worker updated, reloading page');
+      window.location.reload();
+    });
   });
 } else {
-  console.log('[App] Service Workers not supported');
+  console.warn('PWA: Service Worker not supported in this browser');
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

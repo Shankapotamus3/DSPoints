@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Star, Delete } from "lucide-react";
 
@@ -33,21 +33,15 @@ export default function Login() {
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async ({ userId, pin }: { userId: string; pin: string }) => {
-      console.log("[Login] Mutation function called with userId:", userId);
       const response = await apiRequest("POST", "/api/auth/login", { userId, pin });
-      console.log("[Login] Response status:", response.status);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Login failed");
-      }
-      const data = await response.json();
-      console.log("[Login] Login successful, response data:", data);
-      return data;
+      return response.json();
     },
-    onSuccess: (data) => {
-      console.log("[Login] onSuccess called, redirecting to /");
-      // Do a full page reload to ensure cookies are properly set
-      window.location.replace("/");
+    onSuccess: () => {
+      toast({
+        title: "Welcome back! 🎉",
+        description: "You've successfully logged in!",
+      });
+      setLocation("/");
     },
     onError: (error: any) => {
       setShowError(true);
@@ -76,7 +70,6 @@ export default function Login() {
   // Auto-submit when PIN reaches 4-6 digits
   useEffect(() => {
     if (pin.length >= 4 && pin.length <= 6 && selectedUser) {
-      console.log("[Login] Attempting login for user:", selectedUser.id, "with PIN length:", pin.length);
       loginMutation.mutate({ userId: selectedUser.id, pin });
     }
   }, [pin, selectedUser]);
