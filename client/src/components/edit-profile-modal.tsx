@@ -177,8 +177,15 @@ export default function EditProfileModal({ open, onClose, user }: EditProfileMod
                         };
                       }}
                       onComplete={(result) => {
+                        console.log("Upload complete, result:", result);
                         if (result.successful && result.successful.length > 0) {
-                          const uploadUrl = result.successful[0].uploadURL;
+                          const file = result.successful[0];
+                          console.log("Successful file:", file);
+                          
+                          // Try to get the upload URL from different possible properties
+                          const uploadUrl = file.uploadURL || file.response?.uploadURL || file.meta?.uploadURL;
+                          console.log("Extracted uploadURL:", uploadUrl);
+                          
                           if (uploadUrl) {
                             setUploadedImageUrl(uploadUrl);
                             setFormData({
@@ -189,6 +196,13 @@ export default function EditProfileModal({ open, onClose, user }: EditProfileMod
                             toast({
                               title: "Avatar Uploaded!",
                               description: "Your avatar image has been uploaded successfully.",
+                            });
+                          } else {
+                            console.error("No uploadURL found in result");
+                            toast({
+                              title: "Upload Error",
+                              description: "Upload completed but could not get the file URL",
+                              variant: "destructive",
                             });
                           }
                         }
