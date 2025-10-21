@@ -1,7 +1,7 @@
 // Enhanced Service Worker for PWA with caching and push notifications
-const CACHE_NAME = 'chore-rewards-v2';
-const STATIC_CACHE_NAME = 'chore-rewards-static-v2';
-const DYNAMIC_CACHE_NAME = 'chore-rewards-dynamic-v2';
+const CACHE_NAME = 'chore-rewards-v3';
+const STATIC_CACHE_NAME = 'chore-rewards-static-v3';
+const DYNAMIC_CACHE_NAME = 'chore-rewards-dynamic-v3';
 
 // Assets to cache on install - only essential files that exist in production
 const STATIC_ASSETS = [
@@ -154,9 +154,18 @@ async function cacheFirst(request, cacheName) {
 
 // Network-first strategy for dynamic content
 async function networkFirst(request, cacheName) {
+  const url = new URL(request.url);
+  
+  // NEVER cache authentication endpoints - always go to network
+  if (url.pathname.startsWith('/api/auth') || url.pathname === '/api/user') {
+    return fetch(request);
+  }
+  
   try {
     const networkResponse = await fetch(request);
-    if (networkResponse && networkResponse.status === 200) {
+    // Only cache successful responses (200) and never cache auth endpoints
+    if (networkResponse && networkResponse.status === 200 && 
+        !url.pathname.startsWith('/api/auth') && url.pathname !== '/api/user') {
       const cache = await caches.open(cacheName);
       cache.put(request, networkResponse.clone());
       console.log('Service Worker: Updated cache for:', request.url);
@@ -170,7 +179,7 @@ async function networkFirst(request, cacheName) {
     }
     
     // Return offline fallback for API requests
-    if (isAPIRequest(new URL(request.url))) {
+    if (isAPIRequest(url)) {
       return new Response(JSON.stringify({ 
         error: 'Offline', 
         message: 'This feature is not available offline' 

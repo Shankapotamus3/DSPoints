@@ -33,6 +33,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.use(
     session({
+      name: 'choreapp.sid', // Explicit cookie name
       store: sessionStore,
       secret: process.env.SESSION_SECRET || "chore-rewards-secret-key",
       resave: false,
@@ -40,8 +41,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax", // Explicitly set SameSite for better cookie handling
+        secure: false, // Disable secure for development to ensure cookies work
+        sameSite: "lax",
+        path: '/', // Explicitly set path
       },
     })
   );
