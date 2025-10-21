@@ -44,7 +44,7 @@ export default function Login() {
       console.log("Login successful, data:", data);
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       console.log("Login onSuccess called with data:", data);
       
       // Show success message
@@ -53,11 +53,29 @@ export default function Login() {
         description: "You've successfully logged in!",
       });
       
-      console.log("About to redirect with full page reload");
-      // Force full page reload to ensure session cookie is properly recognized
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 500);
+      console.log("Clearing cache and verifying session...");
+      // Clear all cached queries
+      queryClient.clear();
+      
+      // Verify session is working before redirect
+      try {
+        const userCheck = await fetch("/api/user", { credentials: "include" });
+        console.log("User check status:", userCheck.status);
+        
+        if (userCheck.ok) {
+          console.log("Session verified, redirecting...");
+          window.location.href = "/";
+        } else {
+          console.error("Session not established, status:", userCheck.status);
+          toast({
+            title: "Session Error",
+            description: "Please try logging in again",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("Error verifying session:", error);
+      }
     },
     onError: (error: any) => {
       setShowError(true);
