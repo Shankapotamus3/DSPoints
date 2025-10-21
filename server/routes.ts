@@ -84,6 +84,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Middleware to require authentication
   function requireAuth(req: Request, res: Response, next: NextFunction) {
+    console.log("[requireAuth] Session ID:", req.sessionID);
+    console.log("[requireAuth] Session userId:", req.session.userId);
+    console.log("[requireAuth] Cookies:", req.headers.cookie);
+    
     if (!req.session.userId) {
       return res.status(401).json({ message: "Authentication required" });
     }
@@ -196,12 +200,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set session and explicitly save it
       req.session.userId = user.id;
       
+      console.log("[Login] About to save session. Session ID:", req.sessionID);
+      console.log("[Login] User ID being saved:", user.id);
+      
       // Explicitly save session before responding
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
           return res.status(500).json({ message: "Failed to save session" });
         }
+        
+        console.log("[Login] Session saved successfully!");
+        console.log("[Login] Response headers will include:", res.getHeaders());
         
         res.json({ 
           message: "Login successful",
@@ -236,6 +246,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user with points (requires authentication)
   app.get("/api/user", requireAuth, async (req, res) => {
     try {
+      console.log("[/api/user] Session ID:", req.sessionID);
+      console.log("[/api/user] Session data:", req.session);
+      console.log("[/api/user] Cookies:", req.headers.cookie);
+      
       const userId = getCurrentUserId(req);
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });
