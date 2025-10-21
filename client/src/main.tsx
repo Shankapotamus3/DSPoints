@@ -2,35 +2,33 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Clear all service worker caches and force unregister
+// Register the Service Worker reset script to clear cached version
 if ('serviceWorker' in navigator) {
-  // Unregister all service workers
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    if (registrations.length > 0) {
-      console.log(`Unregistering ${registrations.length} service worker(s)...`);
-      registrations.forEach(registration => {
-        registration.unregister().then(() => {
-          console.log('Service Worker unregistered');
-        });
-      });
+  console.log('[App] Registering Service Worker reset script...');
+  
+  // Listen for completion message
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SW_RESET_COMPLETE') {
+      console.log('[App] Service Worker reset complete - reloading page...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     }
   });
-}
-
-// Clear ALL caches
-if ('caches' in window) {
-  caches.keys().then((cacheNames) => {
-    if (cacheNames.length > 0) {
-      console.log(`Clearing ${cacheNames.length} cache(s)...`);
-      cacheNames.forEach((cacheName) => {
-        caches.delete(cacheName).then(() => {
-          console.log('Cache cleared:', cacheName);
-        });
-      });
-    }
+  
+  // Register the reset script (this will override any cached Service Worker)
+  navigator.serviceWorker.register('/sw-reset.js?v=' + Date.now(), {
+    updateViaCache: 'none'
+  }).then((registration) => {
+    console.log('[App] Reset script registered successfully');
+    
+    // Force update to bypass any caching
+    registration.update();
+  }).catch((error) => {
+    console.error('[App] Failed to register reset script:', error);
   });
+} else {
+  console.log('[App] Service Workers not supported');
 }
-
-console.log('Service Worker cleanup initiated');
 
 createRoot(document.getElementById("root")!).render(<App />);

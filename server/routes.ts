@@ -17,6 +17,73 @@ declare module 'express-session' {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // CRITICAL: Serve Service Worker reset script with no-cache headers
+  // This fixes the issue where browsers cache the old Service Worker indefinitely
+  const swResetScript = `
+// Service Worker Reset Script - Forces unregistration and cache clearing
+self.addEventListener('install', (event) => {
+  console.log('[SW Reset] Installing and forcing immediate activation...');
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('[SW Reset] Activating - clearing all caches and unregistering...');
+  event.waitUntil(
+    Promise.all([
+      // Clear all caches
+      caches.keys().then(cacheNames => {
+        return Promise.all(
+          cacheNames.map(cacheName => {
+            console.log('[SW Reset] Deleting cache:', cacheName);
+            return caches.delete(cacheName);
+          })
+        );
+      }),
+      // Take control of all clients
+      self.clients.claim()
+    ]).then(() => {
+      console.log('[SW Reset] Caches cleared, unregistering service worker...');
+      return self.registration.unregister();
+    }).then(() => {
+      console.log('[SW Reset] Service worker unregistered successfully');
+      // Notify all clients to reload
+      return self.clients.matchAll();
+    }).then(clients => {
+      clients.forEach(client => {
+        client.postMessage({ type: 'SW_RESET_COMPLETE' });
+      });
+    })
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  // Don't intercept any requests during reset
+  return;
+});
+`;
+
+  // Serve reset script with no-cache headers
+  app.get('/sw-reset.js', (req, res) => {
+    res.set({
+      'Content-Type': 'application/javascript',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    res.send(swResetScript);
+  });
+
+  // Also serve /sw.js as the reset script to override any cached version
+  app.get('/sw.js', (req, res) => {
+    res.set({
+      'Content-Type': 'application/javascript',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    res.send(swResetScript);
+  });
+
   // Setup session store - use PostgreSQL if available, otherwise fall back to memory store
   let sessionStore;
   
