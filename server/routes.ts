@@ -284,6 +284,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Toggle admin status (admin only)
+  app.put("/api/users/:id/admin", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isAdmin } = req.body;
+
+      if (typeof isAdmin !== 'boolean') {
+        return res.status(400).json({ message: "isAdmin must be a boolean value" });
+      }
+
+      // Get the target user
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Safety check: prevent removing the last admin
+      if (!isAdmin && targetUser.isAdmin) {
+        // Only check if we're removing admin from someone who is currently an admin
+        const allUsers = await storage.getUsers();
+        const adminCount = allUsers.filter(u => u.isAdmin).length;
+        
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Cannot remove the last admin. At least one admin is required." });
+        }
+      }
+
+      const user = await storage.updateUser(id, { isAdmin });
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update admin status" });
+    }
+  });
+
   // Chore routes
   app.get("/api/chores", async (req, res) => {
     try {

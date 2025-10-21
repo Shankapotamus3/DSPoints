@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Users, UserCircle, Crown, Edit } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Plus, Users, UserCircle, Crown, Edit, Shield, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import AddFamilyMemberModal from "@/components/add-family-member-modal";
 import EditProfileModal from "@/components/edit-profile-modal";
 import type { User } from "@shared/schema";
@@ -12,10 +16,59 @@ import type { User } from "@shared/schema";
 export default function Family() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const { toast } = useToast();
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["/api/user"],
+  });
+
+  const toggleAdminMutation = useMutation({
+    mutationFn: async ({ userId, isAdmin }: { userId: string; isAdmin: boolean }) => {
+      const response = await apiRequest("PUT", `/api/users/${userId}/admin`, { isAdmin });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update admin status");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Admin Status Updated",
+        description: "User's admin privileges have been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update admin status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAdminToggle = (userId: string, currentAdminStatus: boolean) => {
+    // Prevent admin from removing their own admin status if they're the last admin
+    if (currentAdminStatus && userId === currentUser?.id) {
+      const adminCount = users.filter(u => u.isAdmin).length;
+      if (adminCount <= 1) {
+        toast({
+          title: "Cannot Remove Admin",
+          description: "You cannot remove your own admin privileges as the last admin.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    toggleAdminMutation.mutate({ userId, isAdmin: !currentAdminStatus });
+  };
+
+  const isCurrentUserAdmin = currentUser?.isAdmin || false;
 
   if (isLoading) {
     return (
@@ -113,6 +166,30 @@ export default function Family() {
                       <UserCircle size={12} />
                       <span>Member since creation</span>
                     </div>
+                    
+                    {/* Admin Toggle - Only visible to admins */}
+                    {isCurrentUserAdmin && (
+                      <div className="flex items-center justify-center space-x-2 mt-3 p-2 bg-muted/50 rounded-lg">
+                        {user.isAdmin ? (
+                          <Shield className="w-4 h-4 text-amber-500" />
+                        ) : (
+                          <ShieldOff className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <Label 
+                          htmlFor={`admin-toggle-${user.id}`} 
+                          className="text-xs cursor-pointer"
+                        >
+                          Admin
+                        </Label>
+                        <Switch
+                          id={`admin-toggle-${user.id}`}
+                          checked={user.isAdmin}
+                          onCheckedChange={() => handleAdminToggle(user.id, user.isAdmin)}
+                          disabled={toggleAdminMutation.isPending}
+                          data-testid={`switch-admin-${user.id}`}
+                        />
+                      </div>
+                    )}
                     
                     <Button
                       variant="outline"
