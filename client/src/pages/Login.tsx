@@ -41,11 +41,13 @@ export default function Login() {
       return response.json();
     },
     onSuccess: () => {
-      // Clear all cached queries and force hard reload
-      queryClient.clear();
+      // Remove the cached query entirely to ensure fresh fetch
+      queryClient.removeQueries({ queryKey: ["/api/user"] });
       
-      // Force hard reload to ensure fresh state
-      window.location.href = "/";
+      // Small delay to ensure session is fully established
+      setTimeout(() => {
+        setLocation("/");
+      }, 100);
     },
     onError: (error: any) => {
       setShowError(true);
