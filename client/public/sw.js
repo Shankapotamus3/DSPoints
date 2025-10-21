@@ -1,7 +1,7 @@
 // Enhanced Service Worker for PWA with caching and push notifications
-const CACHE_NAME = 'chore-rewards-v2';
-const STATIC_CACHE_NAME = 'chore-rewards-static-v2';
-const DYNAMIC_CACHE_NAME = 'chore-rewards-dynamic-v2';
+const CACHE_NAME = 'chore-rewards-v3';
+const STATIC_CACHE_NAME = 'chore-rewards-static-v3';
+const DYNAMIC_CACHE_NAME = 'chore-rewards-dynamic-v3';
 
 // Assets to cache on install - only essential files that exist in production
 const STATIC_ASSETS = [

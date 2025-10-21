@@ -2,7 +2,6 @@ import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import NotFound from "./pages/not-found";
@@ -92,14 +91,12 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <div className="min-h-screen bg-background text-foreground">
-          {!isLoginPage && <Header theme={theme} onToggleTheme={toggleTheme} />}
-          {!isLoginPage && <Navigation />}
-          <Router />
-        </div>
-        <Toaster />
-      </TooltipProvider>
+      <div className="min-h-screen bg-background text-foreground">
+        {!isLoginPage && <Header theme={theme} onToggleTheme={toggleTheme} />}
+        {!isLoginPage && <Navigation />}
+        <Router />
+      </div>
+      <Toaster />
     </QueryClientProvider>
   );
 }

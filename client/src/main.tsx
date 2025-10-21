@@ -4,6 +4,14 @@ import "./index.css";
 
 // Register service worker for PWA functionality
 if ('serviceWorker' in navigator) {
+  // Unregister existing service workers to ensure fresh load
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister();
+      console.log('PWA: Unregistered old service worker');
+    }
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
@@ -17,12 +25,10 @@ if ('serviceWorker' in navigator) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed') {
                 if (navigator.serviceWorker.controller) {
-                  // New version available
-                  console.log('PWA: New version available, ready to update');
-                  if (confirm('A new version of ChoreRewards is available. Update now?')) {
-                    newWorker.postMessage({ type: 'SKIP_WAITING' });
-                    window.location.reload();
-                  }
+                  // New version available - auto-update instead of prompting
+                  console.log('PWA: New version available, updating automatically');
+                  newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  window.location.reload();
                 } else {
                   // First time installation
                   console.log('PWA: App cached for offline use');
