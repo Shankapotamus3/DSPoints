@@ -92,17 +92,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }
   
+  // Trust proxy for production deployments
+  if (process.env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+  }
+  
   app.use(
     session({
       store: sessionStore,
       secret: process.env.SESSION_SECRET || "chore-rewards-secret-key",
       resave: false,
       saveUninitialized: false,
+      proxy: process.env.NODE_ENV === "production",
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
+        path: "/",
       },
     })
   );
