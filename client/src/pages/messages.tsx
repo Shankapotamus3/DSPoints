@@ -35,7 +35,7 @@ export default function Messages() {
   const [messageInput, setMessageInput] = useState("");
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
@@ -146,9 +146,22 @@ export default function Messages() {
   const selectedUser = users?.find(u => u.id === selectedUserId);
   const otherUsers = users?.filter(u => u.id !== currentUser?.id);
 
+  // Callback ref to get the ScrollArea's viewport element
+  const scrollAreaRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      // Find the viewport element inside the ScrollArea
+      const viewport = node.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        scrollViewportRef.current = viewport as HTMLDivElement;
+      }
+    }
+  };
+
   // Auto-scroll to bottom when conversation changes
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollViewportRef.current) {
+      scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -218,7 +231,7 @@ export default function Messages() {
               </div>
 
               {/* Messages */}
-              <ScrollArea className="flex-1 p-4">
+              <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
                 <div className="space-y-4">
                   {conversation.map((message) => {
                     const isSent = message.senderId === currentUser?.id;
@@ -255,7 +268,6 @@ export default function Messages() {
                       No messages yet. Start the conversation!
                     </div>
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 
