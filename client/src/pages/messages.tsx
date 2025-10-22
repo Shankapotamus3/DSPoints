@@ -206,11 +206,11 @@ export default function Messages() {
         </div>
 
         {/* Conversation Area */}
-        <div className={`flex-1 flex flex-col ${!selectedUserId ? 'hidden md:flex' : ''}`}>
+        <div className={`flex-1 flex flex-col overflow-hidden ${!selectedUserId ? 'hidden md:flex' : ''}`}>
           {selectedUserId && selectedUser ? (
             <>
               {/* Conversation Header */}
-              <div className="p-4 border-b border-border bg-muted/20 flex items-center gap-3">
+              <div className="p-4 border-b border-border bg-muted/20 flex items-center gap-3 flex-shrink-0">
                 <button
                   onClick={() => setSelectedUserId(null)}
                   className="md:hidden mr-2 p-1 hover:bg-muted rounded"
@@ -278,7 +278,7 @@ export default function Messages() {
               </div>
 
               {/* Message Input */}
-              <div className="p-4 border-t border-border bg-muted/20">
+              <div className="p-4 border-t border-border bg-muted/20 flex-shrink-0">
                 {uploadedImageUrl && (
                   <div className="mb-2 relative inline-block">
                     <img src={uploadedImageUrl} alt="Preview" className="max-h-20 rounded-lg" />
