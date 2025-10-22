@@ -90,13 +90,13 @@ export default function Messages() {
       const uploadResponse = await apiRequest("GET", "/api/messages/image-upload");
       const { uploadURL } = await uploadResponse.json();
 
-      // Upload file to object storage
-      const formData = new FormData();
-      formData.append("file", file);
-
+      // Upload file to object storage using PUT method
       const response = await fetch(uploadURL, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
       });
 
       if (!response.ok) {
@@ -145,10 +145,10 @@ export default function Messages() {
   const otherUsers = users?.filter(u => u.id !== currentUser?.id);
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6">
+    <div className="max-w-6xl mx-auto p-4 md:p-6 pb-24 md:pb-6">
       <h1 className="text-3xl md:text-4xl font-bold mb-6 text-foreground">Messages</h1>
 
-      <Card className="h-[calc(100vh-12rem)] flex flex-col md:flex-row overflow-hidden">
+      <Card className="h-[calc(100vh-16rem)] md:h-[calc(100vh-12rem)] flex flex-col md:flex-row overflow-hidden">
         {/* User List - Sidebar */}
         <div className="w-full md:w-80 border-b md:border-r border-border bg-muted/20">
           <div className="p-4 border-b border-border">

@@ -40,30 +40,29 @@ export default function Navigation() {
         </div>
       </nav>
 
-      {/* Mobile Navigation - bottom bar */}
+      {/* Mobile Navigation - bottom bar with horizontal scroll */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm pb-safe">
-        <div className="flex justify-around items-center px-2 py-2">
-          {navItems.map(({ path, label, icon: Icon }) => (
-            <Link key={path} href={path}>
-              <button
-                className={cn(
-                  "flex flex-col items-center justify-center py-2 px-4 min-w-[64px] rounded-lg transition-all",
-                  location === path
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground active:bg-muted"
-                )}
-                data-testid={`nav-mobile-${label.toLowerCase()}`}
-              >
-                <Icon size={22} className="mb-1" />
-                <span className="text-xs font-medium">{label}</span>
-              </button>
-            </Link>
-          ))}
+        <div className="overflow-x-auto">
+          <div className="flex items-center px-2 py-2 min-w-max">
+            {navItems.map(({ path, label, icon: Icon }) => (
+              <Link key={path} href={path}>
+                <button
+                  className={cn(
+                    "flex flex-col items-center justify-center py-2 px-4 min-w-[64px] rounded-lg transition-all whitespace-nowrap",
+                    location === path
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground active:bg-muted"
+                  )}
+                  data-testid={`nav-mobile-${label.toLowerCase()}`}
+                >
+                  <Icon size={22} className="mb-1" />
+                  <span className="text-xs font-medium">{label}</span>
+                </button>
+              </Link>
+            ))}
+          </div>
         </div>
       </nav>
-      
-      {/* Spacer for mobile bottom navigation */}
-      <div className="md:hidden h-20" />
     </>
   );
 }
