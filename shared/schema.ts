@@ -71,6 +71,16 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  recipientId: varchar("recipient_id").references(() => users.id), // null for broadcast messages
+  content: text("content").notNull(),
+  imageUrl: text("image_url"), // Optional image attachment
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   points: true,
@@ -120,6 +130,19 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+  isRead: true,
+}).extend({
+  imageUrl: z.string().nullish().refine((url) => {
+    if (!url) return true;
+    return url.startsWith('/objects/') || url.startsWith('https://storage.googleapis.com/');
+  }, {
+    message: 'Image URL must be a valid object storage URL'
+  }),
+});
+
 export const choreApprovalSchema = z.object({
   comment: z.string().optional(),
 });
@@ -134,6 +157,8 @@ export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
 export type ChoreApproval = z.infer<typeof choreApprovalSchema>;
 
 // Enum-like types for better type safety

@@ -9,15 +9,18 @@ import {
   type InsertTransaction,
   type Notification,
   type InsertNotification,
+  type Message,
+  type InsertMessage,
   type ChoreStatus,
   users,
   chores,
   rewards,
   transactions,
-  notifications
+  notifications,
+  messages
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, or, and, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -58,6 +61,14 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationAsRead(id: string): Promise<Notification | undefined>;
   markAllNotificationsAsRead(userId: string): Promise<void>;
+
+  // Message methods
+  getMessages(userId: string): Promise<Message[]>;
+  getConversation(userId: string, otherUserId: string): Promise<Message[]>;
+  getUnreadMessageCount(userId: string): Promise<number>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  markMessageAsRead(id: string): Promise<Message | undefined>;
+  markConversationAsRead(userId: string, otherUserId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -292,6 +303,72 @@ export class DatabaseStorage implements IStorage {
       .update(notifications)
       .set({ isRead: true })
       .where(eq(notifications.userId, userId));
+  }
+
+  // Message methods - only return messages where user is sender or recipient
+  async getMessages(userId: string): Promise<Message[]> {
+    return await db.select().from(messages)
+      .where(
+        and(
+          or(
+            eq(messages.senderId, userId),
+            eq(messages.recipientId, userId)
+          ),
+          // Exclude broadcast messages (recipientId is null) unless user is sender
+          or(
+            eq(messages.senderId, userId),
+            sql`${messages.recipientId} IS NOT NULL`
+          )
+        )
+      )
+      .orderBy(desc(messages.createdAt));
+  }
+
+  async getConversation(userId: string, otherUserId: string): Promise<Message[]> {
+    return await db.select().from(messages)
+      .where(or(
+        and(eq(messages.senderId, userId), eq(messages.recipientId, otherUserId)),
+        and(eq(messages.senderId, otherUserId), eq(messages.recipientId, userId))
+      ))
+      .orderBy(messages.createdAt);
+  }
+
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(and(
+        eq(messages.recipientId, userId),
+        eq(messages.isRead, false)
+      ));
+    return result[0]?.count ?? 0;
+  }
+
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const [message] = await db
+      .insert(messages)
+      .values(insertMessage)
+      .returning();
+    return message;
+  }
+
+  async markMessageAsRead(id: string): Promise<Message | undefined> {
+    const [message] = await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(eq(messages.id, id))
+      .returning();
+    return message || undefined;
+  }
+
+  async markConversationAsRead(userId: string, otherUserId: string): Promise<void> {
+    await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(and(
+        eq(messages.senderId, otherUserId),
+        eq(messages.recipientId, userId),
+        eq(messages.isRead, false)
+      ));
   }
   
   async resetRecurringChores(): Promise<void> {

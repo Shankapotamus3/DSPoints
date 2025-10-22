@@ -8,6 +8,7 @@ import NotFound from "./pages/not-found";
 import Dashboard from "./pages/dashboard";
 import Chores from "./pages/chores";
 import Rewards from "./pages/rewards";
+import Messages from "./pages/messages";
 import Family from "./pages/family";
 import History from "./pages/history";
 import Login from "./pages/Login";
@@ -55,6 +56,9 @@ function Router() {
       </Route>
       <Route path="/rewards">
         {() => <ProtectedRoute component={Rewards} />}
+      </Route>
+      <Route path="/messages">
+        {() => <ProtectedRoute component={Messages} />}
       </Route>
       <Route path="/family">
         {() => <ProtectedRoute component={Family} />}

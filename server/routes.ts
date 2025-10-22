@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema } from "@shared/schema";
+import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema, insertMessageSchema } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { z } from "zod";
 import session from "express-session";
@@ -899,6 +899,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating user avatar:", error);
       res.status(500).json({ message: "Failed to update avatar" });
+    }
+  });
+
+  // Message Routes
+  
+  // Get upload URL for message image attachment
+  app.get("/api/messages/image-upload", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      // Use the entity upload URL - works for any private object
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Error getting message image upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Finalize message image upload and get public URL
+  app.post("/api/messages/image-finalize", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { objectPath } = req.body;
+      if (!objectPath) {
+        return res.status(400).json({ message: "objectPath is required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      // Make the message image publicly viewable by all family members
+      const finalPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        objectPath,
+        {
+          owner: userId,
+          visibility: "public",
+        }
+      );
+
+      res.json({ imageUrl: finalPath });
+    } catch (error) {
+      console.error("Error finalizing message image:", error);
+      res.status(500).json({ message: "Failed to finalize image upload" });
+    }
+  });
+  
+  // Get all messages for current user
+  app.get("/api/messages", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const allMessages = await storage.getMessages(userId);
+      res.json(allMessages);
+    } catch (error) {
+      console.error("Error getting messages:", error);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Get conversation between two users
+  app.get("/api/messages/conversation/:otherUserId", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { otherUserId } = req.params;
+      
+      // Verify both users exist
+      const otherUser = await storage.getUser(otherUserId);
+      if (!otherUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const conversation = await storage.getConversation(userId, otherUserId);
+      
+      // Only mark as read the messages WHERE current user is the recipient
+      await storage.markConversationAsRead(userId, otherUserId);
+      
+      res.json(conversation);
+    } catch (error) {
+      console.error("Error getting conversation:", error);
+      res.status(500).json({ message: "Failed to get conversation" });
+    }
+  });
+
+  // Get unread message count
+  app.get("/api/messages/unread-count", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const count = await storage.getUnreadMessageCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error getting unread count:", error);
+      res.status(500).json({ message: "Failed to get unread count" });
+    }
+  });
+
+  // Send a message
+  app.post("/api/messages", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { recipientId, content, imageUrl } = insertMessageSchema.parse({
+        senderId: userId,
+        ...req.body,
+      });
+
+      const message = await storage.createMessage({
+        senderId: userId,
+        recipientId,
+        content,
+        imageUrl,
+      });
+
+      res.json(message);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid message data", errors: error.errors });
+      }
+      console.error("Error creating message:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Mark a message as read
+  app.put("/api/messages/:id/read", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { id } = req.params;
+      const message = await storage.markMessageAsRead(id);
+
+      if (!message) {
+        return res.status(404).json({ message: "Message not found" });
+      }
+
+      // Only allow recipient to mark as read
+      if (message.recipientId !== userId) {
+        return res.status(403).json({ message: "Not authorized to mark this message as read" });
+      }
+
+      res.json(message);
+    } catch (error) {
+      console.error("Error marking message as read:", error);
+      res.status(500).json({ message: "Failed to mark message as read" });
     }
   });
 
