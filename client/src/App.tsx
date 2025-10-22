@@ -71,9 +71,15 @@ function Router() {
   );
 }
 
-function App() {
+function AppContent() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [location] = useLocation();
+  
+  // Check if user is authenticated
+  const { data: user } = useQuery({
+    queryKey: ["/api/user"],
+    retry: false,
+  });
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
@@ -92,14 +98,21 @@ function App() {
   };
 
   const isLoginPage = location === "/login";
+  const showNavigation = !isLoginPage && user;
 
   return (
+    <div className="min-h-screen bg-background text-foreground">
+      {showNavigation && <Header theme={theme} onToggleTheme={toggleTheme} />}
+      {showNavigation && <Navigation />}
+      <Router />
+    </div>
+  );
+}
+
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-background text-foreground">
-        {!isLoginPage && <Header theme={theme} onToggleTheme={toggleTheme} />}
-        {!isLoginPage && <Navigation />}
-        <Router />
-      </div>
+      <AppContent />
       <Toaster />
     </QueryClientProvider>
   );
