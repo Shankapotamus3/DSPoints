@@ -149,7 +149,12 @@ export default function Messages() {
   // Auto-scroll to bottom when conversation changes or user selects a conversation
   const scrollToBottom = () => {
     if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }, 100);
     }
   };
 
