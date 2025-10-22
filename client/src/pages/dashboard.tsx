@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8 pb-24 md:pb-8">
         {/* Dashboard Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Today's Progress */}

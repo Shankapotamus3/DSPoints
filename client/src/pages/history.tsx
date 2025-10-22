@@ -35,7 +35,7 @@ export default function History() {
   };
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8">
+    <main className="max-w-6xl mx-auto px-4 py-8 pb-24 md:pb-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Transaction History</h1>
         <p className="text-muted-foreground">Track your points and see your progress</p>

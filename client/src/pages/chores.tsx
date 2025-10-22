@@ -127,7 +127,7 @@ export default function Chores() {
 
   return (
     <>
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8 pb-24 md:pb-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold">Chores</h1>
