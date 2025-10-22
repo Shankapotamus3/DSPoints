@@ -103,8 +103,9 @@ export default function Messages() {
         throw new Error("Upload failed");
       }
 
-      const uploadData = await response.json();
-      const objectPath = uploadData.publicUrl || uploadData.url;
+      // Extract the object path from the signed URL (remove query parameters)
+      const urlObj = new URL(uploadURL);
+      const objectPath = urlObj.origin + urlObj.pathname;
 
       // Finalize the upload to get the public URL
       const finalizeResponse = await apiRequest("POST", "/api/messages/image-finalize", {
