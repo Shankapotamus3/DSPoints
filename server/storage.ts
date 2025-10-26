@@ -13,6 +13,8 @@ import {
   type InsertMessage,
   type Punishment,
   type InsertPunishment,
+  type PushSubscription,
+  type InsertPushSubscription,
   type ChoreStatus,
   users,
   chores,
@@ -20,7 +22,8 @@ import {
   transactions,
   notifications,
   messages,
-  punishments
+  punishments,
+  pushSubscriptions
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, or, and, desc } from "drizzle-orm";
@@ -79,6 +82,13 @@ export interface IStorage {
   updatePunishment(id: string, text: string): Promise<Punishment | undefined>;
   markPunishmentComplete(id: string): Promise<Punishment | undefined>;
   deletePunishment(id: string): Promise<boolean>;
+
+  // Push subscription methods
+  getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
+  getAllPushSubscriptions(): Promise<PushSubscription[]>;
+  createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription>;
+  deletePushSubscription(endpoint: string): Promise<boolean>;
+  deletePushSubscriptionsByUserId(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -415,6 +425,36 @@ export class DatabaseStorage implements IStorage {
   async deletePunishment(id: string): Promise<boolean> {
     const result = await db.delete(punishments).where(eq(punishments.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Push subscription methods
+  async getPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    return await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async getAllPushSubscriptions(): Promise<PushSubscription[]> {
+    return await db.select().from(pushSubscriptions);
+  }
+
+  async createPushSubscription(insertSubscription: InsertPushSubscription): Promise<PushSubscription> {
+    // First try to delete any existing subscription with the same endpoint
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, insertSubscription.endpoint));
+    
+    // Then insert the new subscription
+    const [subscription] = await db
+      .insert(pushSubscriptions)
+      .values(insertSubscription)
+      .returning();
+    return subscription;
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<boolean> {
+    const result = await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint)).returning();
+    return result.length > 0;
+  }
+
+  async deletePushSubscriptionsByUserId(userId: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
   }
   
   async resetRecurringChores(): Promise<void> {

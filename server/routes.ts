@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema, insertMessageSchema, insertPunishmentSchema } from "@shared/schema";
+import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema, insertMessageSchema, insertPunishmentSchema, insertPushSubscriptionSchema } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { z } from "zod";
 import session from "express-session";
@@ -9,6 +9,7 @@ import connectPgSimple from "connect-pg-simple";
 import { db } from "./db";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import webpush from "web-push";
 
 // Extend express-session types
 declare module 'express-session' {
@@ -168,9 +169,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  // Helper function to send notifications
+  // Configure web-push with VAPID keys
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(
+      'mailto:admin@chorerewards.com',
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    );
+  }
+
+  // Helper function to send push notification to a specific user
+  async function sendPushNotification(userId: string, title: string, message: string, type: string, choreId?: string) {
+    try {
+      const subscriptions = await storage.getPushSubscriptions(userId);
+      
+      const payload = JSON.stringify({
+        title,
+        message,
+        type,
+        choreId
+      });
+
+      // Send to all subscriptions for this user
+      const promises = subscriptions.map(async (sub) => {
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth
+              }
+            },
+            payload
+          );
+        } catch (error: any) {
+          // If subscription is no longer valid (410 Gone), remove it
+          if (error.statusCode === 410) {
+            await storage.deletePushSubscription(sub.endpoint);
+          }
+          console.error(`Failed to send push to ${sub.endpoint}:`, error);
+        }
+      });
+
+      await Promise.all(promises);
+    } catch (error) {
+      console.error('Failed to send push notification:', error);
+    }
+  }
+
+  // Helper function to send notifications (both in-app and push)
   async function sendNotification(userId: string, title: string, message: string, type: string, choreId?: string) {
     try {
+      // Create in-app notification
       await storage.createNotification({
         userId,
         title,
@@ -178,6 +229,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type,
         choreId
       });
+
+      // Send push notification
+      await sendPushNotification(userId, title, message, type, choreId);
     } catch (error) {
       console.error('Failed to send notification:', error);
     }
@@ -756,7 +810,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Claimed: ${reward.name}`,
         choreId: null,
         rewardId: reward.id,
+        userId: userId,
       });
+
+      // Send notification to admins about reward claim
+      const allUsers = await storage.getUsers();
+      const admins = allUsers.filter(u => u.isAdmin);
+      
+      for (const admin of admins) {
+        await sendNotification(
+          admin.id,
+          "Reward Claimed",
+          `${user.displayName || user.username} claimed "${reward.name}" for ${reward.cost} points`,
+          "reward_claimed"
+        );
+      }
 
       res.json({ message: "Reward claimed successfully", newPoints });
     } catch (error) {
@@ -1154,6 +1222,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting punishment:", error);
       res.status(500).json({ message: "Failed to delete punishment" });
+    }
+  });
+
+  // ====================
+  // PUSH SUBSCRIPTION ROUTES
+  // ====================
+
+  // Get VAPID public key for push subscription
+  app.get("/api/push/vapid-public-key", (req, res) => {
+    if (!process.env.VAPID_PUBLIC_KEY) {
+      return res.status(500).json({ message: "Push notifications not configured" });
+    }
+    res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+  });
+
+  // Subscribe to push notifications
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const subscriptionData = insertPushSubscriptionSchema.parse({
+        userId,
+        ...req.body,
+      });
+
+      const subscription = await storage.createPushSubscription(subscriptionData);
+      res.json(subscription);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid subscription data", errors: error.errors });
+      }
+      console.error("Error creating push subscription:", error);
+      res.status(500).json({ message: "Failed to subscribe to push notifications" });
+    }
+  });
+
+  // Unsubscribe from push notifications
+  app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+      if (!endpoint) {
+        return res.status(400).json({ message: "Endpoint required" });
+      }
+
+      const deleted = await storage.deletePushSubscription(endpoint);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Error unsubscribing from push:", error);
+      res.status(500).json({ message: "Failed to unsubscribe from push notifications" });
     }
   });
 
