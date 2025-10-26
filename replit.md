@@ -30,6 +30,7 @@ Preferred communication style: Simple, everyday language.
 - **Chores**: Task management with completion tracking, point values, and timestamps
 - **Rewards**: Configurable rewards with costs, availability, and metadata
 - **Transactions**: Comprehensive audit trail for all point earning and spending activities
+- **Push Subscriptions**: Browser push notification endpoints for real-time alerts
 - **Schema Validation**: Drizzle-Zod integration for type-safe database operations
 
 ## Authentication & Security
@@ -37,6 +38,14 @@ Preferred communication style: Simple, everyday language.
 - **Input Validation**: Zod schemas for both client and server-side validation
 - **Type Safety**: End-to-end TypeScript with shared schema definitions
 - **CSRF Protection**: Built-in protection via same-origin policy and session validation
+
+## Push Notification System
+- **Web Push API**: Browser push notifications using service workers and VAPID authentication
+- **Notification Types**: Chore completion alerts (to admins), chore approval confirmations (to users), and reward claim notifications (to admins)
+- **Subscription Management**: Automatic subscription on login with graceful degradation if permissions denied
+- **Cleanup Strategy**: Stale push subscriptions (HTTP 410) automatically removed when sending fails
+- **Security**: VAPID keys (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY) required for authentication
+- **User Experience**: Non-intrusive permission requests with 1-second delay after login
 
 ## Development Workflow
 - **Hot Reloading**: Vite dev server with Express API proxy
