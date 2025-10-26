@@ -171,11 +171,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Configure web-push with VAPID keys
   if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-    webpush.setVapidDetails(
-      'mailto:admin@chorerewards.com',
-      process.env.VAPID_PUBLIC_KEY,
-      process.env.VAPID_PRIVATE_KEY
-    );
+    try {
+      webpush.setVapidDetails(
+        'mailto:admin@chorerewards.com',
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+      );
+      console.log('Web push configured successfully');
+    } catch (error) {
+      console.error('Failed to configure web push - invalid VAPID keys:', error);
+      console.log('Push notifications will not work until valid VAPID keys are set');
+    }
+  } else {
+    console.log('VAPID keys not set - push notifications disabled');
   }
 
   // Helper function to send push notification to a specific user

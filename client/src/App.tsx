@@ -15,6 +15,7 @@ import History from "./pages/history";
 import Login from "./pages/Login";
 import Header from "./components/header";
 import Navigation from "./components/navigation";
+import { subscribeToPushNotifications, isPushNotificationSupported } from "./lib/pushNotifications";
 
 // Protected route wrapper
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -96,6 +97,17 @@ function AppContent() {
     localStorage.setItem("theme", theme);
     document.documentElement.className = theme;
   }, [theme]);
+
+  // Subscribe to push notifications when user logs in
+  useEffect(() => {
+    if (user && isPushNotificationSupported()) {
+      // Delay subscription slightly to avoid blocking UI
+      const timer = setTimeout(() => {
+        subscribeToPushNotifications().catch(console.error);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light");
