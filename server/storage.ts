@@ -185,7 +185,10 @@ export class DatabaseStorage implements IStorage {
           isCompleted: false,  // Reset to incomplete for next cycle
           completedAt: completionDate, // Track when it was completed
           nextDueDate: nextDue,
-          status: 'completed' // Set to completed status for approval workflow
+          status: 'completed', // Set to completed status for approval workflow
+          approvedAt: null, // Clear previous approval
+          approvedById: null,
+          approvalComment: null
         })
         .where(eq(chores.id, id))
         .returning();
@@ -197,7 +200,10 @@ export class DatabaseStorage implements IStorage {
         .set({ 
           isCompleted: false, // Keep false until approved
           completedAt: completionDate,
-          status: 'completed' // Set to completed status for approval workflow
+          status: 'completed', // Set to completed status for approval workflow
+          approvedAt: null, // Clear previous approval
+          approvedById: null,
+          approvalComment: null
         })
         .where(eq(chores.id, id))
         .returning();
