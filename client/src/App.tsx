@@ -129,12 +129,12 @@ function AppContent() {
   };
 
   const isLoginPage = location === "/login";
-  const showNavigation = !isLoginPage && !!user;
+  const showNavigation = !isLoginPage;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {showNavigation ? <Header theme={theme} onToggleTheme={toggleTheme} /> : null}
-      {showNavigation ? <Navigation /> : null}
+      {showNavigation && <Header theme={theme} onToggleTheme={toggleTheme} />}
+      {showNavigation && <Navigation />}
       <Router />
     </div>
   );
