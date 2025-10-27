@@ -186,15 +186,16 @@ export const pointAdjustmentSchema = z.object({
 });
 
 export const choreCompletionSchema = z.object({
-  completedAt: z.string().datetime().optional().refine((date) => {
-    if (!date) return true;
-    const completionDate = new Date(date);
-    const now = new Date();
-    // Allow completion dates up to current time, but not in the future
-    return completionDate <= now;
-  }, {
-    message: 'Completion date cannot be in the future'
-  }),
+  completedAt: z.string().datetime().optional(),
+}).refine((data) => {
+  if (!data.completedAt) return true;
+  const completionDate = new Date(data.completedAt);
+  const now = new Date();
+  // Allow completion dates up to current time, but not in the future
+  return completionDate <= now;
+}, {
+  message: 'Completion date cannot be in the future',
+  path: ['completedAt'],
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
