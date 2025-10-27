@@ -276,19 +276,28 @@ self.addEventListener('push', (event) => {
 
   const data = event.data.json();
   const title = data.title || 'ChoreRewards';
+  
+  let actions = [];
+  if (data.type === 'chore_completed') {
+    actions = [{
+      action: 'view',
+      title: 'View Chores'
+    }];
+  } else if (data.type === 'new_message') {
+    actions = [{
+      action: 'view',
+      title: 'View Message'
+    }];
+  }
+  
   const options = {
     body: data.message || 'You have a new notification',
     icon: '/icon-192x192.svg',
     badge: '/icon-192x192.svg',
-    tag: data.choreId || 'general',
-    requireInteraction: data.type === 'chore_completed',
+    tag: data.choreId || data.type || 'general',
+    requireInteraction: data.type === 'chore_completed' || data.type === 'new_message',
     data: data,
-    actions: data.type === 'chore_completed' ? [
-      {
-        action: 'view',
-        title: 'View Chores'
-      }
-    ] : []
+    actions: actions
   };
 
   event.waitUntil(
@@ -302,12 +311,28 @@ self.addEventListener('notificationclick', (event) => {
   
   event.notification.close();
 
+  const notificationData = event.notification.data;
+  let targetUrl = '/';
+  
+  // Navigate to appropriate page based on notification type
+  if (notificationData && notificationData.type === 'new_message') {
+    targetUrl = '/messages';
+  } else if (notificationData && notificationData.type === 'chore_completed') {
+    targetUrl = '/chores';
+  }
+
   event.waitUntil(
-    self.clients.matchAll().then((clients) => {
-      if (clients.length > 0) {
-        return clients[0].focus();
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Check if there's already a window open
+      for (const client of clients) {
+        if (client.url.includes(self.registration.scope) && 'focus' in client) {
+          // Navigate to target URL and focus
+          client.postMessage({ type: 'NAVIGATE', url: targetUrl });
+          return client.focus();
+        }
       }
-      return self.clients.openWindow('/');
+      // If no window is open, open a new one
+      return self.clients.openWindow(targetUrl);
     })
   );
 });

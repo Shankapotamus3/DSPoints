@@ -82,7 +82,7 @@ function Router() {
 
 function AppContent() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   
   // Check if user is authenticated
   const { data: user } = useQuery({
@@ -123,6 +123,22 @@ function AppContent() {
       }
     }
   }, [user]);
+
+  // Listen for navigation messages from service worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data && event.data.type === 'NAVIGATE') {
+          setLocation(event.data.url);
+        }
+      };
+
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+      };
+    }
+  }, [setLocation]);
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light");
