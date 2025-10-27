@@ -530,6 +530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const chores = await storage.getChores();
       res.json(chores);
     } catch (error) {
+      console.error("Error in GET /api/chores:", error);
       res.status(500).json({ message: "Failed to get chores" });
     }
   });

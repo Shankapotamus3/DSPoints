@@ -27,7 +27,11 @@ Preferred communication style: Simple, everyday language.
 
 ## Database Schema Design
 - **Users**: Store user credentials and point balance
-- **Chores**: Task management with completion tracking, point values, and timestamps
+- **Chores**: Task management with completion tracking, point values, timestamps, and assignment fields
+  - `assignedToId`: User the chore is assigned to (optional)
+  - `completedById`: User who actually completed the chore (tracked for point awards)
+  - **Point Award System**: Points are awarded to the user who completes the chore (`completedById`), not necessarily the assigned user
+  - **Recurring Chore Reset**: Recurring chores automatically reset to pending status when their `nextDueDate` arrives
 - **Rewards**: Configurable rewards with costs, availability, and metadata
 - **Transactions**: Comprehensive audit trail for all point earning and spending activities
 - **Push Subscriptions**: Browser push notification endpoints for real-time alerts
@@ -46,6 +50,14 @@ Preferred communication style: Simple, everyday language.
 - **Cleanup Strategy**: Stale push subscriptions (HTTP 410) automatically removed when sending fails
 - **Security**: VAPID keys (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY) required for authentication
 - **User Experience**: Non-intrusive permission requests with 1-second delay after login
+
+## Chore Completion Workflow
+- **Flexible Completion**: Any user can complete any chore regardless of assignment
+- **Approval Process**: Completed chores require admin approval before points are awarded
+- **Point Distribution**: Points are awarded to the user who completed the chore, tracked via `completedById` field
+- **Notifications**: Admins notified when chores are completed; completers notified on approval/rejection
+- **Recurring Chores**: Automatically reset to pending status and clear completion data when due date arrives
+- **Reset Logic**: GET /api/chores automatically checks and resets overdue recurring chores before returning results
 
 ## Development Workflow
 - **Hot Reloading**: Vite dev server with Express API proxy

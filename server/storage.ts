@@ -26,7 +26,7 @@ import {
   pushSubscriptions
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql, or, and, desc } from "drizzle-orm";
+import { eq, sql, or, and, desc, lte } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -468,24 +468,36 @@ export class DatabaseStorage implements IStorage {
   async resetRecurringChores(): Promise<void> {
     // Reset recurring chores that are past their due date
     const now = new Date();
-    await db
-      .update(chores)
-      .set({ 
-        isCompleted: false,
-        status: 'pending',
-        completedAt: null,
-        completedById: null,
-        approvedAt: null,
-        approvedById: null,
-        approvalComment: null,
-        nextDueDate: sql`CASE 
-          WHEN recurring_type = 'daily' THEN ${now} + interval '1 day'
-          WHEN recurring_type = 'weekly' THEN ${now} + interval '1 week'
-          WHEN recurring_type = 'monthly' THEN ${now} + interval '1 month'
-          ELSE next_due_date
-        END`
-      })
-      .where(sql`is_recurring = true AND next_due_date <= ${now}::timestamp`);
+    
+    // Get all recurring chores that are due
+    const dueChores = await db
+      .select()
+      .from(chores)
+      .where(and(
+        eq(chores.isRecurring, true),
+        lte(chores.nextDueDate, now)
+      ));
+    
+    // Reset each chore individually with the correct next due date
+    for (const chore of dueChores) {
+      const nextDueDate = chore.recurringType
+        ? this.calculateNextDueDate(chore.recurringType as 'daily' | 'weekly' | 'monthly')
+        : chore.nextDueDate;
+      
+      await db
+        .update(chores)
+        .set({ 
+          isCompleted: false,
+          status: 'pending',
+          completedAt: null,
+          completedById: null,
+          approvedAt: null,
+          approvedById: null,
+          approvalComment: null,
+          nextDueDate: nextDueDate
+        })
+        .where(eq(chores.id, chore.id));
+    }
   }
   
   private calculateNextDueDate(type: 'daily' | 'weekly' | 'monthly'): Date {
