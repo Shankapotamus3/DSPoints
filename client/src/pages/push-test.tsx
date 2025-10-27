@@ -22,11 +22,30 @@ export default function PushTest() {
 
   const testSubscribe = async () => {
     addLog('=== Attempting Subscription ===');
+    
+    // Capture console logs during subscription
+    const originalLog = console.log;
+    const originalError = console.error;
+    
+    console.log = (...args) => {
+      addLog(`[LOG] ${args.join(' ')}`);
+      originalLog(...args);
+    };
+    
+    console.error = (...args) => {
+      addLog(`[ERROR] ${args.join(' ')}`);
+      originalError(...args);
+    };
+    
     try {
       await subscribeToPushNotifications();
       addLog('✅ Subscription succeeded!');
     } catch (error) {
       addLog(`❌ Subscription failed: ${error}`);
+    } finally {
+      // Restore console
+      console.log = originalLog;
+      console.error = originalError;
     }
   };
 
