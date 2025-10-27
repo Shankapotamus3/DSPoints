@@ -36,6 +36,7 @@ export const chores = pgTable("chores", {
   nextDueDate: timestamp("next_due_date"),
   // Family member assignment
   assignedToId: varchar("assigned_to_id").references(() => users.id),
+  completedById: varchar("completed_by_id").references(() => users.id), // Track who actually completed the chore
 });
 
 export const rewards = pgTable("rewards", {
