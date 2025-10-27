@@ -708,7 +708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Send rejection notification to the user who completed the chore
-      const userId = rejectedChore.assignedToId;
+      const userId = rejectedChore.completedById;
       if (userId) {
         await sendNotification(
           userId,
