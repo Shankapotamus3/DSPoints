@@ -644,8 +644,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Failed to approve chore" });
       }
 
-      // Award points to assigned user
-      const userId = approvedChore.assignedToId;
+      // Award points to the user who completed the chore
+      const userId = approvedChore.completedById;
       if (userId) {
         const user = await storage.getUser(userId);
         if (user) {
