@@ -1165,6 +1165,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         imageUrl,
       });
 
+      // Send push notification to recipient(s)
+      const sender = await storage.getUser(userId);
+      const senderName = sender?.displayName || sender?.username || "Someone";
+      
+      if (recipientId) {
+        // Direct message - send to specific recipient
+        await sendPushNotification(
+          recipientId,
+          `New message from ${senderName}`,
+          content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+          "new_message"
+        );
+      } else {
+        // Broadcast message - send to all users except sender
+        const allUsers = await storage.getUsers();
+        for (const user of allUsers) {
+          if (user.id !== userId) {
+            await sendPushNotification(
+              user.id,
+              `Broadcast from ${senderName}`,
+              content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+              "new_message"
+            );
+          }
+        }
+      }
+
       res.json(message);
     } catch (error) {
       if (error instanceof z.ZodError) {
