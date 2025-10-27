@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema, insertMessageSchema, insertPunishmentSchema, insertPushSubscriptionSchema } from "@shared/schema";
+import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema, insertMessageSchema, insertPunishmentSchema, insertPushSubscriptionSchema, pointAdjustmentSchema } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { z } from "zod";
 import session from "express-session";
@@ -469,6 +469,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ message: "Failed to update admin status" });
+    }
+  });
+
+  // Adjust user points (admin only)
+  app.post("/api/users/:id/adjust-points", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount, reason } = pointAdjustmentSchema.parse(req.body);
+
+      // Get the target user
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Calculate new points (ensure it doesn't go negative)
+      const newPoints = Math.max(0, targetUser.points + amount);
+      
+      // Update user points
+      const user = await storage.updateUserPoints(id, newPoints);
+      if (!user) {
+        return res.status(500).json({ message: "Failed to update user points" });
+      }
+
+      // Create transaction record
+      await storage.createTransaction({
+        type: amount > 0 ? "earn" : "spend",
+        amount: Math.abs(amount),
+        description: `Admin adjustment: ${reason}`,
+        choreId: null,
+        rewardId: null,
+        userId: id,
+      });
+
+      res.json(sanitizeUser(user));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid point adjustment data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to adjust user points" });
     }
   });
 
