@@ -75,7 +75,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 1. Railway will automatically deploy your app
 2. Once deployed, click **"View Logs"** to monitor the deployment
-3. After successful deployment, click the **"URL"** to open your live app
+3. The app includes a `/health` endpoint that Railway uses to verify the deployment is successful
+4. After successful deployment (healthcheck passes), click the **"URL"** to open your live app
 
 ### Step 6: Run Database Migrations
 
@@ -137,7 +138,8 @@ VAPID_PRIVATE_KEY=your-vapid-private-key
 
 1. Click **"Manual Deploy"** → **"Deploy latest commit"** to trigger deployment
 2. Watch the deployment logs to monitor progress
-3. Once complete, click the URL at the top to open your live app
+3. The app includes a `/health` endpoint that Render uses to verify the deployment is successful
+4. Once complete (healthcheck passes), click the URL at the top to open your live app
 
 ### Step 6: Run Database Migrations
 
@@ -164,6 +166,15 @@ Once your app is deployed, test these features:
 ---
 
 ## Troubleshooting
+
+### Healthcheck Failures
+- The app includes a `/health` endpoint that platforms use to verify it's running
+- If healthcheck fails, check these:
+  - Verify the app is starting successfully (check deployment logs)
+  - Ensure `PORT` environment variable is being used (set automatically by platforms)
+  - Check that all required environment variables are set (especially `DATABASE_URL` and `SESSION_SECRET`)
+  - Confirm the build completed successfully
+  - Try visiting `https://your-app-url.com/health` - it should return `{"status":"healthy"}`
 
 ### Database Connection Issues
 - Verify `DATABASE_URL` is set correctly in environment variables
