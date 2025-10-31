@@ -213,19 +213,9 @@ export default function EditProfileModal({ open, onClose, user }: EditProfileMod
                           const file = result.successful[0];
                           console.log("Successful file:", file);
                           
-                          // Get the avatar URL - different for Cloudinary vs Replit storage
-                          let avatarUrl: string | undefined;
-                          
-                          // Cloudinary returns URL in response.body.secure_url
-                          const cloudinaryUrl = (file.response as any)?.body?.secure_url;
-                          if (cloudinaryUrl && typeof cloudinaryUrl === 'string') {
-                            avatarUrl = cloudinaryUrl;
-                            console.log("Cloudinary URL:", avatarUrl);
-                          } else {
-                            // Replit object storage returns uploadURL
-                            avatarUrl = file.uploadURL || (file.response as any)?.uploadURL || (file.meta as any)?.uploadURL;
-                            console.log("Replit storage URL:", avatarUrl);
-                          }
+                          // Get the avatar URL - ObjectUploader sets file.uploadURL for both storage types
+                          const avatarUrl = file.uploadURL;
+                          console.log("Avatar URL from uploadURL:", avatarUrl);
                           
                           if (avatarUrl) {
                             setUploadedImageUrl(avatarUrl);
