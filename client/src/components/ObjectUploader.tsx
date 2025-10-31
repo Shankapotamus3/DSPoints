@@ -130,6 +130,15 @@ export function ObjectUploader({
           method: 'PUT',
           fieldName: 'file',
           formData: false, // Don't wrap in FormData, send raw file
+          // Replit storage returns empty response, so manually construct the response
+          getResponseData(responseText) {
+            console.log("📦 Replit storage response:", responseText);
+            // Extract clean URL from the upload URL
+            const urlObj = new URL(params.uploadURL);
+            const cleanUrl = urlObj.origin + urlObj.pathname;
+            console.log("📦 Extracted clean URL:", cleanUrl);
+            return { url: cleanUrl };
+          },
         });
       }
     });
@@ -142,44 +151,24 @@ export function ObjectUploader({
         console.log("✅ Upload success:", file?.name);
         console.log("Full response object:", response);
         console.log("Response body:", response?.body);
-        console.log("Response body type:", typeof response?.body);
-        console.log("Upload params:", uploadParams);
         
-        // Try multiple ways to extract the URL from the response
+        // Extract the URL from the response
         let extractedUrl: string | undefined;
         
-        // Method 1: response.body.secure_url (standard Cloudinary with JSON parsing)
+        // Check for Cloudinary's secure_url
         if ((response?.body as any)?.secure_url) {
           extractedUrl = (response.body as any).secure_url;
-          console.log("☁️ Method 1: Found secure_url in response.body");
+          console.log("☁️ Found Cloudinary secure_url:", extractedUrl);
         }
-        // Method 2: response.secure_url (if body is merged into response)
-        else if ((response as any)?.secure_url) {
-          extractedUrl = (response as any).secure_url;
-          console.log("☁️ Method 2: Found secure_url in response");
-        }
-        // Method 3: Parse response.body as string (if JSON wasn't auto-parsed)
-        else if (typeof response?.body === 'string') {
-          try {
-            const parsed = JSON.parse(response.body);
-            if (parsed.secure_url) {
-              extractedUrl = parsed.secure_url;
-              console.log("☁️ Method 3: Parsed secure_url from string response.body");
-            }
-          } catch (e) {
-            console.log("Method 3 failed: Could not parse response.body as JSON");
-          }
-        }
-        // Method 4: Replit storage - extract from upload URL
-        else if (uploadParams?.storageType === 'replit' && uploadParams?.uploadURL) {
-          const urlObj = new URL(uploadParams.uploadURL);
-          extractedUrl = urlObj.origin + urlObj.pathname;
-          console.log("📦 Method 4: Replit storage URL extracted");
+        // Check for standard url property (from getResponseData)
+        else if ((response?.body as any)?.url) {
+          extractedUrl = (response.body as any).url;
+          console.log("📦 Found url from getResponseData:", extractedUrl);
         }
         
         if (extractedUrl) {
           file!.uploadURL = extractedUrl;
-          console.log("✅ Final URL set:", extractedUrl);
+          console.log("✅ Final file.uploadURL set:", extractedUrl);
         } else {
           console.error("❌ Could not extract URL from response");
           console.error("Response structure:", JSON.stringify(response, null, 2));
