@@ -72,7 +72,20 @@ export function ObjectUploader({
         shouldUseMultipart: false,
         getUploadParameters: onGetUploadParameters,
       })
+      .on("upload", () => {
+        console.log("🚀 Upload started");
+      })
+      .on("upload-success", (file, response) => {
+        console.log("✅ Upload success:", file?.name, response);
+      })
+      .on("upload-error", (file, error) => {
+        console.error("❌ Upload error:", file?.name, error);
+      })
+      .on("error", (error) => {
+        console.error("❌ Uppy error:", error);
+      })
       .on("complete", (result) => {
+        console.log("🏁 Upload complete:", result);
         onComplete?.(result);
         setShowModal(false); // Close modal after upload
       })
