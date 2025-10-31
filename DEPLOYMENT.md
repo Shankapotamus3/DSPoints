@@ -88,7 +88,14 @@ Railway will automatically deploy your app. The startup process includes:
 
 1. Railway will automatically deploy your app
 2. Once deployed, click **"View Logs"** to monitor the deployment
-3. The app includes a `/health` endpoint that Railway uses to verify the deployment is successful
+3. Look for these success messages:
+   ```
+   📊 Using standard PostgreSQL driver
+   🌱 Starting admin seed...
+   ✅ Default admin account created successfully!
+   ✅ Server running on port 8080
+   ```
+4. The app includes a `/health` endpoint that Railway uses to verify the deployment is successful
 4. After successful deployment (healthcheck passes), click the **"URL"** to open your live app
 
 ### Step 6: Run Database Migrations
