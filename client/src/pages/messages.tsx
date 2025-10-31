@@ -89,38 +89,62 @@ export default function Messages() {
     try {
       // Get upload URL for message image
       const uploadResponse = await apiRequest("GET", "/api/messages/image-upload");
-      const { uploadURL } = await uploadResponse.json();
+      const uploadData = await uploadResponse.json();
+      const { uploadURL, cloudinaryParams, storageType } = uploadData;
 
-      // Upload file to object storage using PUT method
-      const response = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
+      // Handle Cloudinary uploads differently than Replit storage
+      if (storageType === 'cloudinary' && cloudinaryParams) {
+        // Upload to Cloudinary
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', cloudinaryParams.apiKey);
+        formData.append('timestamp', cloudinaryParams.timestamp.toString());
+        formData.append('signature', cloudinaryParams.signature);
+        formData.append('folder', cloudinaryParams.folder);
 
-      if (!response.ok) {
-        throw new Error("Upload failed");
+        const response = await fetch(uploadURL, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error("Cloudinary upload failed");
+        }
+
+        const result = await response.json();
+        setUploadedImageUrl(result.secure_url);
+      } else {
+        // Replit object storage upload
+        const response = await fetch(uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Upload failed");
+        }
+
+        // Extract the object path from the signed URL (remove query parameters)
+        const urlObj = new URL(uploadURL);
+        const objectPath = urlObj.origin + urlObj.pathname;
+
+        // Finalize the upload to get the public URL
+        const finalizeResponse = await apiRequest("POST", "/api/messages/image-finalize", {
+          objectPath,
+        });
+        const { imageUrl } = await finalizeResponse.json();
+        setUploadedImageUrl(imageUrl);
       }
-
-      // Extract the object path from the signed URL (remove query parameters)
-      const urlObj = new URL(uploadURL);
-      const objectPath = urlObj.origin + urlObj.pathname;
-
-      // Finalize the upload to get the public URL
-      const finalizeResponse = await apiRequest("POST", "/api/messages/image-finalize", {
-        objectPath,
-      });
-      const { imageUrl } = await finalizeResponse.json();
-
-      setUploadedImageUrl(imageUrl);
       
       toast({
         title: "Image uploaded",
         description: "Your image is ready to send",
       });
     } catch (error) {
+      console.error("Image upload error:", error);
       toast({
         title: "Upload failed",
         description: "Failed to upload image. Please try again.",

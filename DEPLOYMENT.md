@@ -71,6 +71,18 @@ VAPID_PRIVATE_KEY=your-vapid-private-key
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+**For image uploads (avatars and messages), you need Cloudinary**:
+- See [CLOUDINARY_SETUP.md](./CLOUDINARY_SETUP.md) for detailed instructions
+- Quick setup:
+  1. Create free account at [cloudinary.com](https://cloudinary.com)
+  2. Get your Cloud Name, API Key, and API Secret from the dashboard
+  3. Add them as Railway environment variables:
+     ```
+     CLOUDINARY_CLOUD_NAME=your_cloud_name
+     CLOUDINARY_API_KEY=your_api_key
+     CLOUDINARY_API_SECRET=your_api_secret
+     ```
+
 ### Step 5: Deployment & First Login
 
 Railway will automatically deploy your app. The startup process includes:

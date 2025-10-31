@@ -209,23 +209,33 @@ export default function EditProfileModal({ open, onClose, user }: EditProfileMod
                           const file = result.successful[0];
                           console.log("Successful file:", file);
                           
-                          // Try to get the upload URL from different possible properties
-                          const uploadUrl = file.uploadURL || file.response?.uploadURL || file.meta?.uploadURL;
-                          console.log("Extracted uploadURL:", uploadUrl);
+                          // Get the avatar URL - different for Cloudinary vs Replit storage
+                          let avatarUrl: string | undefined;
                           
-                          if (uploadUrl) {
-                            setUploadedImageUrl(uploadUrl);
+                          // Cloudinary returns URL in response.body.secure_url
+                          const cloudinaryUrl = (file.response as any)?.body?.secure_url;
+                          if (cloudinaryUrl && typeof cloudinaryUrl === 'string') {
+                            avatarUrl = cloudinaryUrl;
+                            console.log("Cloudinary URL:", avatarUrl);
+                          } else {
+                            // Replit object storage returns uploadURL
+                            avatarUrl = file.uploadURL || (file.response as any)?.uploadURL || (file.meta as any)?.uploadURL;
+                            console.log("Replit storage URL:", avatarUrl);
+                          }
+                          
+                          if (avatarUrl) {
+                            setUploadedImageUrl(avatarUrl);
                             setFormData({
                               ...formData,
                               avatarType: "image",
-                              avatarUrl: uploadUrl,
+                              avatarUrl,
                             });
                             toast({
                               title: "Avatar Uploaded!",
                               description: "Your avatar image has been uploaded successfully.",
                             });
                           } else {
-                            console.error("No uploadURL found in result");
+                            console.error("No URL found in result");
                             toast({
                               title: "Upload Error",
                               description: "Upload completed but could not get the file URL",

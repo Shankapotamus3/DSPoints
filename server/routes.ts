@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertUserSchema, choreApprovalSchema, insertMessageSchema, insertPunishmentSchema, insertPushSubscriptionSchema, pointAdjustmentSchema, choreCompletionSchema } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { shouldUseCloudinary, getCloudinaryUploadSignature, isCloudinaryConfigured } from "./cloudinaryStorage";
 import { z } from "zod";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -994,11 +995,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`🖼️  Getting avatar upload URL for user: ${id}`);
-      const objectStorageService = new ObjectStorageService();
-      // Use user-scoped upload URL for security
-      const uploadURL = await objectStorageService.getUserScopedAvatarUploadURL(id);
-      console.log(`✅ Avatar upload URL generated successfully`);
-      res.json({ uploadURL });
+      
+      // Use Cloudinary on Railway or when configured, otherwise use Replit object storage
+      if (shouldUseCloudinary()) {
+        console.log(`📤 Using Cloudinary for avatar upload`);
+        const cloudinaryParams = await getCloudinaryUploadSignature(`avatars/${id}`);
+        res.json({ 
+          uploadURL: `https://api.cloudinary.com/v1_1/${cloudinaryParams.cloudName}/image/upload`,
+          cloudinaryParams,
+          storageType: 'cloudinary'
+        });
+      } else {
+        console.log(`📤 Using Replit object storage for avatar upload`);
+        const objectStorageService = new ObjectStorageService();
+        const uploadURL = await objectStorageService.getUserScopedAvatarUploadURL(id);
+        console.log(`✅ Avatar upload URL generated successfully`);
+        res.json({ uploadURL, storageType: 'replit' });
+      }
     } catch (error) {
       console.error("❌ Error getting avatar upload URL:", error);
       console.error("Error details:", error instanceof Error ? error.message : String(error));
@@ -1083,11 +1096,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`📷 Getting message image upload URL for user: ${userId}`);
-      const objectStorageService = new ObjectStorageService();
-      // Use the entity upload URL - works for any private object
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      console.log(`✅ Message image upload URL generated successfully`);
-      res.json({ uploadURL });
+      
+      // Use Cloudinary on Railway or when configured, otherwise use Replit object storage
+      if (shouldUseCloudinary()) {
+        console.log(`📤 Using Cloudinary for message image upload`);
+        const cloudinaryParams = await getCloudinaryUploadSignature('messages');
+        res.json({ 
+          uploadURL: `https://api.cloudinary.com/v1_1/${cloudinaryParams.cloudName}/image/upload`,
+          cloudinaryParams,
+          storageType: 'cloudinary'
+        });
+      } else {
+        console.log(`📤 Using Replit object storage for message image upload`);
+        const objectStorageService = new ObjectStorageService();
+        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+        console.log(`✅ Message image upload URL generated successfully`);
+        res.json({ uploadURL, storageType: 'replit' });
+      }
     } catch (error) {
       console.error("❌ Error getting message image upload URL:", error);
       console.error("Error details:", error instanceof Error ? error.message : String(error));

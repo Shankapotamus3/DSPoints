@@ -71,13 +71,38 @@ export function ObjectUploader({
     })
       .use(AwsS3, {
         shouldUseMultipart: false,
-        getUploadParameters: onGetUploadParameters,
+        getUploadParameters: async (file) => {
+          const params = await onGetUploadParameters();
+          
+          // Check if this is a Cloudinary upload (has cloudinaryParams)
+          if ('cloudinaryParams' in params && params.cloudinaryParams) {
+            const { cloudinaryParams } = params as any;
+            return {
+              method: 'POST',
+              url: params.url,
+              fields: {
+                api_key: cloudinaryParams.apiKey,
+                timestamp: cloudinaryParams.timestamp,
+                signature: cloudinaryParams.signature,
+                folder: cloudinaryParams.folder,
+              },
+              headers: {},
+            };
+          }
+          
+          // Regular upload (Replit object storage)
+          return params;
+        },
       })
       .on("upload", () => {
         console.log("🚀 Upload started");
       })
       .on("upload-success", (file, response) => {
         console.log("✅ Upload success:", file?.name, response);
+        // Cloudinary returns the URL in response.body.secure_url
+        if (response && response.body && response.body.secure_url) {
+          console.log("Cloudinary URL:", response.body.secure_url);
+        }
       })
       .on("upload-error", (file, error) => {
         console.error("❌ Upload error:", file?.name, error);
