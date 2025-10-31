@@ -88,9 +88,6 @@ export function ObjectUploader({
       setUploadParams(params);
 
       // Remove any existing uploaders
-      if (uppyInstance.getPlugin('AwsS3')) {
-        uppyInstance.removePlugin(uppyInstance.getPlugin('AwsS3')!);
-      }
       if (uppyInstance.getPlugin('XHRUpload')) {
         uppyInstance.removePlugin(uppyInstance.getPlugin('XHRUpload')!);
       }
@@ -98,21 +95,19 @@ export function ObjectUploader({
       // Check if this is a Cloudinary upload
       if ('cloudinaryParams' in params && params.cloudinaryParams) {
         console.log("☁️ Configuring Cloudinary upload");
-        uppyInstance.use(AwsS3, {
-          shouldUseMultipart: false,
-          getUploadParameters: async () => {
-            const { cloudinaryParams } = params as any;
-            return {
-              method: 'POST',
-              url: params.url,
-              fields: {
-                api_key: cloudinaryParams.apiKey,
-                timestamp: cloudinaryParams.timestamp,
-                signature: cloudinaryParams.signature,
-                folder: cloudinaryParams.folder,
-              },
-              headers: {},
-            };
+        const { cloudinaryParams } = params as any;
+        uppyInstance.use(XHRUpload, {
+          endpoint: params.url,
+          method: 'POST',
+          formData: true, // Use FormData for Cloudinary
+          fieldName: 'file',
+          headers: {},
+          // Add Cloudinary params as form fields
+          formDataAppender(formData) {
+            formData.append('api_key', cloudinaryParams.apiKey);
+            formData.append('timestamp', cloudinaryParams.timestamp.toString());
+            formData.append('signature', cloudinaryParams.signature);
+            formData.append('folder', cloudinaryParams.folder);
           },
         });
       } else {
@@ -133,10 +128,13 @@ export function ObjectUploader({
       })
       .on("upload-success", (file, response) => {
         console.log("✅ Upload success:", file?.name, response);
+        console.log("Response body:", response?.body);
         
         // Cloudinary returns the URL in response.body.secure_url
         if (response && response.body && (response.body as any).secure_url) {
-          console.log("☁️ Cloudinary URL:", (response.body as any).secure_url);
+          const cloudinaryUrl = (response.body as any).secure_url;
+          console.log("☁️ Cloudinary URL:", cloudinaryUrl);
+          file!.uploadURL = cloudinaryUrl;
         } else if (uploadParams?.url) {
           // For Replit storage, extract clean URL from the upload URL
           const urlObj = new URL(uploadParams.url);
