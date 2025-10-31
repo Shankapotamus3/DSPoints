@@ -993,13 +993,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
+      console.log(`🖼️  Getting avatar upload URL for user: ${id}`);
       const objectStorageService = new ObjectStorageService();
       // Use user-scoped upload URL for security
       const uploadURL = await objectStorageService.getUserScopedAvatarUploadURL(id);
+      console.log(`✅ Avatar upload URL generated successfully`);
       res.json({ uploadURL });
     } catch (error) {
-      console.error("Error getting avatar upload URL:", error);
-      res.status(500).json({ message: "Failed to get upload URL" });
+      console.error("❌ Error getting avatar upload URL:", error);
+      console.error("Error details:", error instanceof Error ? error.message : String(error));
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+      res.status(500).json({ message: "Failed to get upload URL", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -1078,13 +1082,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Authentication required" });
       }
 
+      console.log(`📷 Getting message image upload URL for user: ${userId}`);
       const objectStorageService = new ObjectStorageService();
       // Use the entity upload URL - works for any private object
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      console.log(`✅ Message image upload URL generated successfully`);
       res.json({ uploadURL });
     } catch (error) {
-      console.error("Error getting message image upload URL:", error);
-      res.status(500).json({ message: "Failed to get upload URL" });
+      console.error("❌ Error getting message image upload URL:", error);
+      console.error("Error details:", error instanceof Error ? error.message : String(error));
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+      res.status(500).json({ message: "Failed to get upload URL", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
