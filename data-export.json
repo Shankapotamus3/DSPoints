@@ -1,0 +1,143 @@
+{
+  "users": [
+    {
+      "id": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "username": "admin",
+      "password": "$2b$10$f27.4GjsZrgREjINpUan7.nSpS6RVXeKeYrhPbhQHVKfrSp5JB0r6",
+      "pin": "$2b$10$58o/0XXy43nEi6b9EWP55uXSoFEtSJRd3EbJ0EPr/zIUbXoBCju.G",
+      "points": 0,
+      "displayName": "Admin",
+      "avatar": "👑",
+      "avatarType": "emoji",
+      "avatarUrl": null,
+      "isAdmin": true
+    },
+    {
+      "id": "3e28574f-6e0b-4d09-8d18-6a431ab61886",
+      "username": "Test",
+      "password": "$2b$10$0PhNpkztgHEscebTbONy1OY8km5nUIFJjngugzVpNVCjiDb0Q5aVG",
+      "pin": "$2b$10$Lq/tQz6F95M4VYOgf.2oXusfW5ppoYCN805OHgNGxtXSXbnWpdiTy",
+      "points": 100,
+      "displayName": "Test",
+      "avatar": "👤",
+      "avatarType": "emoji",
+      "avatarUrl": null,
+      "isAdmin": false
+    }
+  ],
+  "chores": [
+    {
+      "id": "78e81327-d13a-4938-8e98-e2897c1fdaf3",
+      "name": "Test",
+      "description": "",
+      "points": 50,
+      "estimatedTime": "",
+      "isCompleted": false,
+      "completedAt": "2025-10-25T06:00:00.000Z",
+      "createdAt": "2025-10-27T01:03:44.610Z",
+      "status": "completed",
+      "approvedAt": null,
+      "approvedById": null,
+      "approvalComment": null,
+      "isRecurring": true,
+      "recurringType": "daily",
+      "nextDueDate": "2025-10-28T01:07:16.610Z",
+      "assignedToId": null,
+      "completedById": null
+    },
+    {
+      "id": "95c0613c-7f64-4aba-ac72-6c9f416cff2f",
+      "name": "New",
+      "description": "",
+      "points": 50,
+      "estimatedTime": "",
+      "isCompleted": false,
+      "completedAt": "2025-10-25T06:00:00.000Z",
+      "createdAt": "2025-10-27T01:20:14.900Z",
+      "status": "completed",
+      "approvedAt": null,
+      "approvedById": null,
+      "approvalComment": null,
+      "isRecurring": true,
+      "recurringType": "daily",
+      "nextDueDate": "2025-10-28T01:20:28.087Z",
+      "assignedToId": null,
+      "completedById": null
+    }
+  ],
+  "rewards": [],
+  "transactions": [
+    {
+      "id": "0a69ec11-3a31-4d5e-a69e-923dc1d2abff",
+      "type": "earn",
+      "amount": 100,
+      "description": "Admin adjustment: Test",
+      "choreId": null,
+      "rewardId": null,
+      "userId": "3e28574f-6e0b-4d09-8d18-6a431ab61886",
+      "createdAt": "2025-10-27T01:04:48.282Z"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "53e93284-e775-441e-bf02-81efc7be4e1f",
+      "userId": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "title": "Chore Completed - Pending Approval",
+      "message": "Test has been completed and needs your approval",
+      "type": "chore_completed",
+      "isRead": false,
+      "choreId": "78e81327-d13a-4938-8e98-e2897c1fdaf3",
+      "createdAt": "2025-10-27T01:07:16.677Z"
+    },
+    {
+      "id": "b60f6887-1926-470a-834f-4dc47b48ef6b",
+      "userId": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "title": "Chore Completed - Pending Approval",
+      "message": "New has been completed and needs your approval",
+      "type": "chore_completed",
+      "isRead": false,
+      "choreId": "95c0613c-7f64-4aba-ac72-6c9f416cff2f",
+      "createdAt": "2025-10-27T01:20:28.151Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": "54fc9552-35fc-44c8-8ac8-12e86c07f221",
+      "senderId": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "recipientId": "3e28574f-6e0b-4d09-8d18-6a431ab61886",
+      "content": "Hi",
+      "imageUrl": null,
+      "isRead": false,
+      "createdAt": "2025-10-22T21:56:50.050Z"
+    },
+    {
+      "id": "eaa506b9-c4cb-4e79-88d7-b8115b24e719",
+      "senderId": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "recipientId": "3e28574f-6e0b-4d09-8d18-6a431ab61886",
+      "content": "(Image message)",
+      "imageUrl": "/objects/uploads/e76a812b-8928-45e0-b9dd-e52b7214d078",
+      "isRead": false,
+      "createdAt": "2025-10-22T21:57:14.699Z"
+    },
+    {
+      "id": "8c567240-5e3f-45c7-9647-3d247170e168",
+      "senderId": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "recipientId": "3e28574f-6e0b-4d09-8d18-6a431ab61886",
+      "content": "Hi",
+      "imageUrl": null,
+      "isRead": false,
+      "createdAt": "2025-10-22T22:00:37.605Z"
+    },
+    {
+      "id": "7c88331a-779c-45e9-8d52-7348366ed0d4",
+      "senderId": "34fdec80-7901-4dab-bd03-b01b2e8a14ab",
+      "recipientId": "3e28574f-6e0b-4d09-8d18-6a431ab61886",
+      "content": "Yo",
+      "imageUrl": null,
+      "isRead": false,
+      "createdAt": "2025-10-22T22:00:45.143Z"
+    }
+  ],
+  "punishments": [],
+  "pushSubscriptions": []
+}
