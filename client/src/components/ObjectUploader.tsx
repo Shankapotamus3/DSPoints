@@ -5,6 +5,7 @@ import { DashboardModal } from "@uppy/react";
 import "@uppy/core/dist/style.min.css";
 import "@uppy/dashboard/dist/style.min.css";
 import AwsS3 from "@uppy/aws-s3";
+import XHRUpload from "@uppy/xhr-upload";
 import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
 
@@ -66,27 +67,41 @@ export function ObjectUploader({
   children,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
-  const [uppy] = useState(() =>
-    new Uppy({
+  const [uploadParams, setUploadParams] = useState<any>(null);
+  
+  const [uppy] = useState(() => {
+    const uppyInstance = new Uppy({
       restrictions: {
         maxNumberOfFiles,
         maxFileSize,
-        allowedFileTypes: ['image/*'], // Only allow images for avatars
+        allowedFileTypes: ['image/*'],
       },
       autoProceed: false,
-      debug: true, // Enable debug mode to see what's happening
-    })
-      .use(AwsS3, {
-        shouldUseMultipart: false,
-        getUploadParameters: async (file) => {
-          console.log("📡 Getting upload parameters for:", file.name);
-          const params = await onGetUploadParameters();
-          console.log("📥 Received params:", params);
-          
-          // Check if this is a Cloudinary upload (has cloudinaryParams)
-          if ('cloudinaryParams' in params && params.cloudinaryParams) {
+      debug: true,
+    });
+
+    // We'll dynamically configure the uploader when we know the storage type
+    uppyInstance.on("file-added", async () => {
+      console.log("📡 File added, getting upload parameters");
+      const params = await onGetUploadParameters();
+      console.log("📥 Received params:", params);
+      setUploadParams(params);
+
+      // Remove any existing uploaders
+      if (uppyInstance.getPlugin('AwsS3')) {
+        uppyInstance.removePlugin(uppyInstance.getPlugin('AwsS3')!);
+      }
+      if (uppyInstance.getPlugin('XHRUpload')) {
+        uppyInstance.removePlugin(uppyInstance.getPlugin('XHRUpload')!);
+      }
+
+      // Check if this is a Cloudinary upload
+      if ('cloudinaryParams' in params && params.cloudinaryParams) {
+        console.log("☁️ Configuring Cloudinary upload");
+        uppyInstance.use(AwsS3, {
+          shouldUseMultipart: false,
+          getUploadParameters: async () => {
             const { cloudinaryParams } = params as any;
-            console.log("☁️ Using Cloudinary upload");
             return {
               method: 'POST',
               url: params.url,
@@ -98,32 +113,36 @@ export function ObjectUploader({
               },
               headers: {},
             };
-          }
-          
-          // Regular upload (Replit object storage) - store the signed URL
-          console.log("📦 Using Replit object storage upload");
-          file.meta.signedUploadURL = params.url;
-          return params;
-        },
-      })
+          },
+        });
+      } else {
+        // Replit object storage - use XHRUpload for simpler CORS handling
+        console.log("📦 Configuring Replit storage upload");
+        uppyInstance.use(XHRUpload, {
+          endpoint: params.url,
+          method: 'PUT',
+          fieldName: 'file',
+          formData: false, // Don't wrap in FormData, send raw file
+        });
+      }
+    });
+
+    uppyInstance
       .on("upload", () => {
         console.log("🚀 Upload started");
       })
       .on("upload-success", (file, response) => {
         console.log("✅ Upload success:", file?.name, response);
-        console.log("File object:", file);
         
         // Cloudinary returns the URL in response.body.secure_url
-        if (response && response.body && response.body.secure_url) {
-          console.log("☁️ Cloudinary URL:", response.body.secure_url);
-        } else if (file?.meta?.signedUploadURL) {
-          // For Replit storage, extract clean URL from signed URL
-          const signedUrl = file.meta.signedUploadURL as string;
-          console.log("📦 Signed URL:", signedUrl);
-          const urlObj = new URL(signedUrl);
+        if (response && response.body && (response.body as any).secure_url) {
+          console.log("☁️ Cloudinary URL:", (response.body as any).secure_url);
+        } else if (uploadParams?.url) {
+          // For Replit storage, extract clean URL from the upload URL
+          const urlObj = new URL(uploadParams.url);
           const cleanUrl = urlObj.origin + urlObj.pathname;
-          file.uploadURL = cleanUrl;
-          console.log("📦 Clean Replit storage URL:", cleanUrl);
+          file!.uploadURL = cleanUrl;
+          console.log("📦 Replit storage URL:", cleanUrl);
         }
       })
       .on("upload-error", (file, error) => {
@@ -135,16 +154,15 @@ export function ObjectUploader({
       .on("complete", (result) => {
         console.log("🏁 Upload complete, full result:", result);
         console.log("🏁 Successful files:", result.successful);
-        console.log("🏁 Failed files:", result.failed);
         if (onComplete) {
           console.log("🏁 Calling onComplete callback");
           onComplete(result);
-        } else {
-          console.log("⚠️ No onComplete callback provided");
         }
-        setShowModal(false); // Close modal after upload
-      })
-  );
+        setShowModal(false);
+      });
+
+    return uppyInstance;
+  });
 
   return (
     <div>
