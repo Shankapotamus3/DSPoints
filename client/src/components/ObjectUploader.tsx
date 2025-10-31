@@ -14,6 +14,13 @@ interface ObjectUploaderProps {
   onGetUploadParameters: () => Promise<{
     method: "PUT";
     url: string;
+    cloudinaryParams?: {
+      apiKey: string;
+      timestamp: number;
+      signature: string;
+      folder: string;
+    };
+    storageType?: string;
   }>;
   onComplete?: (
     result: UploadResult<Record<string, unknown>, Record<string, unknown>>
