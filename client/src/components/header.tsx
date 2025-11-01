@@ -55,10 +55,8 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
               <span className="text-muted-foreground text-xs md:text-sm hidden sm:inline">points</span>
             </div>
             
-            {/* PWA Install Prompt - hidden on small mobile */}
-            <div className="hidden sm:block">
-              <InstallPrompt />
-            </div>
+            {/* PWA Install Prompt - show on all devices */}
+            <InstallPrompt />
             
             {/* Notifications */}
             <NotificationCenter />

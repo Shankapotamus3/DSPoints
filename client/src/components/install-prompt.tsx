@@ -194,6 +194,11 @@ export default function InstallPrompt({ onInstallStatusChange }: InstallPromptPr
                 <Smartphone className="w-4 h-4" />
                 <span className="font-medium">On iOS (Safari)</span>
               </div>
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-2 mb-2">
+                <p className="text-xs text-yellow-600 dark:text-yellow-500 font-medium">
+                  ⚠️ Push notifications only work when installed on iPhone/iPad!
+                </p>
+              </div>
               <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
                 <li>Tap the Share button (□↗)</li>
                 <li>Scroll down and tap "Add to Home Screen"</li>
