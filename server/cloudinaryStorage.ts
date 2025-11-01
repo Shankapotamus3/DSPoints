@@ -57,6 +57,9 @@ export async function getCloudinaryUploadSignature(
 
   // Generate signature
   const signature = cloudinary.utils.api_sign_request(params, process.env.CLOUDINARY_API_SECRET!);
+  
+  console.log('☁️ Cloudinary signature params:', params);
+  console.log('☁️ Generated signature:', signature);
 
   return {
     signature,
