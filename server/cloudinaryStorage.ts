@@ -50,10 +50,9 @@ export async function getCloudinaryUploadSignature(
   }
 
   const timestamp = Math.round(new Date().getTime() / 1000);
-  const params = {
+  const params: Record<string, any> = {
     timestamp,
     folder,
-    upload_preset: undefined, // We'll use signed uploads
   };
 
   // Generate signature
