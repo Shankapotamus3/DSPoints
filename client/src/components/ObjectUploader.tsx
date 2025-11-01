@@ -103,25 +103,19 @@ export function ObjectUploader({
           fieldName: 'file',
           headers: {},
           // Add Cloudinary params as form fields
-          // IMPORTANT: Uppy appends 'file' first, then calls formDataAppender
           // This matches the order that works in messages.tsx
-          formDataAppender(formData, _file, _fileName) {
-            console.log("📤 formDataAppender called - current FormData entries:");
-            // Log what's already in FormData
-            for (const pair of (formData as any).entries()) {
-              console.log(`  ${pair[0]}: ${typeof pair[1] === 'object' ? '[File]' : pair[1]}`);
-            }
+          formDataAppender(formData) {
+            console.log("📤 formDataAppender called");
+            console.log("📤 Appending Cloudinary params:", {
+              api_key: cloudinaryParams.apiKey,
+              timestamp: cloudinaryParams.timestamp,
+              folder: cloudinaryParams.folder
+            });
             
-            // Append in the same order as messages.tsx
             formData.append('api_key', cloudinaryParams.apiKey);
             formData.append('timestamp', cloudinaryParams.timestamp.toString());
             formData.append('signature', cloudinaryParams.signature);
             formData.append('folder', cloudinaryParams.folder);
-            
-            console.log("📤 After appending Cloudinary params:");
-            for (const pair of (formData as any).entries()) {
-              console.log(`  ${pair[0]}: ${typeof pair[1] === 'object' ? '[File]' : pair[1]}`);
-            }
           },
           // Manually parse the JSON response
           getResponseData(responseText, response) {
