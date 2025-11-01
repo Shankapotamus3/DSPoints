@@ -999,7 +999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use Cloudinary on Railway or when configured, otherwise use Replit object storage
       if (shouldUseCloudinary()) {
         console.log(`📤 Using Cloudinary for avatar upload`);
-        const cloudinaryParams = await getCloudinaryUploadSignature(`avatars/${id}`);
+        const cloudinaryParams = await getCloudinaryUploadSignature('avatars');
         res.json({ 
           uploadURL: `https://api.cloudinary.com/v1_1/${cloudinaryParams.cloudName}/image/upload`,
           cloudinaryParams,
