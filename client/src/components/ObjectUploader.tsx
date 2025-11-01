@@ -81,7 +81,7 @@ export function ObjectUploader({
     });
 
     // We'll dynamically configure the uploader when we know the storage type
-    uppyInstance.on("file-added", async () => {
+    uppyInstance.on("file-added", async (file) => {
       console.log("📡 File added, getting upload parameters");
       const params = await onGetUploadParameters();
       console.log("📥 Received params:", params);
@@ -94,38 +94,56 @@ export function ObjectUploader({
 
       // Check if this is a Cloudinary upload
       if ('cloudinaryParams' in params && params.cloudinaryParams) {
-        console.log("☁️ Configuring Cloudinary upload");
+        console.log("☁️ Using manual fetch for Cloudinary (bypassing Uppy XHR)");
         const { cloudinaryParams } = params as any;
         
-        // Set Cloudinary params as metadata that will be sent as form fields
-        uppyInstance.setMeta({
-          api_key: cloudinaryParams.apiKey,
-          timestamp: cloudinaryParams.timestamp.toString(),
-          signature: cloudinaryParams.signature,
-          folder: cloudinaryParams.folder,
+        // For Cloudinary, we'll handle the upload manually outside of Uppy
+        // to match the working approach in messages.tsx
+        uppyInstance.on("upload", async () => {
+          try {
+            console.log("☁️ Starting manual Cloudinary upload");
+            const fileData = file!.data;
+            
+            // Create FormData in the exact same order as messages.tsx
+            const formData = new FormData();
+            formData.append('file', fileData);
+            formData.append('api_key', cloudinaryParams.apiKey);
+            formData.append('timestamp', cloudinaryParams.timestamp.toString());
+            formData.append('signature', cloudinaryParams.signature);
+            formData.append('folder', cloudinaryParams.folder);
+            
+            console.log("☁️ Uploading to:", params.uploadURL);
+            const response = await fetch(params.uploadURL, {
+              method: "POST",
+              body: formData,
+            });
+            
+            if (!response.ok) {
+              throw new Error(`Cloudinary upload failed: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log("☁️ Cloudinary upload success:", result);
+            
+            // Manually trigger success event with Cloudinary's response
+            uppyInstance.emit('upload-success', file, {
+              status: 200,
+              body: result,
+              uploadURL: result.secure_url
+            });
+            
+            uppyInstance.emit('complete', {
+              successful: [{ ...file, uploadURL: result.secure_url }],
+              failed: []
+            });
+          } catch (error) {
+            console.error("☁️ Cloudinary upload failed:", error);
+            uppyInstance.emit('upload-error', file, error);
+          }
         });
         
-        uppyInstance.use(XHRUpload, {
-          endpoint: params.uploadURL,
-          method: 'POST',
-          formData: true, // Use FormData for Cloudinary
-          fieldName: 'file',
-          headers: {},
-          // Manually parse the JSON response
-          getResponseData(responseText, response) {
-            console.log("☁️ Cloudinary raw response:", responseText);
-            console.log("☁️ Cloudinary response status:", response?.status);
-            try {
-              const data = JSON.parse(responseText);
-              console.log("☁️ Cloudinary parsed data:", data);
-              return data;
-            } catch (e) {
-              console.error("❌ Failed to parse Cloudinary response:", e);
-              console.error("❌ Response text was:", responseText);
-              return {};
-            }
-          },
-        });
+        // Don't use XHRUpload for Cloudinary, we handle it manually
+        return;
       } else {
         // Replit object storage - use XHRUpload for simpler CORS handling
         console.log("📦 Configuring Replit storage upload");
