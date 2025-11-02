@@ -34,16 +34,41 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 export async function subscribeToPushNotifications(): Promise<void> {
   console.log('subscribeToPushNotifications: Starting subscription process...');
   
+  // Helper to send errors to server for debugging
+  const reportError = async (step: string, error: any) => {
+    try {
+      await fetch('/api/debug/push-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step,
+          error: error?.message || String(error),
+          stack: error?.stack,
+          userAgent: navigator.userAgent,
+        }),
+      });
+    } catch (e) {
+      // Ignore reporting errors
+    }
+  };
+  
   try {
     // Check if already granted
     console.log('subscribeToPushNotifications: Current permission:', Notification.permission);
     if (Notification.permission !== 'granted') {
       console.log('subscribeToPushNotifications: Requesting permission...');
-      const permission = await requestNotificationPermission();
-      console.log('subscribeToPushNotifications: Permission result:', permission);
-      if (permission !== 'granted') {
-        console.log('Push notification permission denied');
-        return;
+      try {
+        const permission = await requestNotificationPermission();
+        console.log('subscribeToPushNotifications: Permission result:', permission);
+        if (permission !== 'granted') {
+          console.log('Push notification permission denied');
+          await reportError('permission_denied', new Error(`Permission: ${permission}`));
+          return;
+        }
+      } catch (error) {
+        console.error('Error requesting permission:', error);
+        await reportError('request_permission', error);
+        throw error;
       }
     }
 
@@ -60,34 +85,50 @@ export async function subscribeToPushNotifications(): Promise<void> {
     // If no subscription, create one
     if (!subscription) {
       console.log('subscribeToPushNotifications: Fetching VAPID public key...');
-      // Get VAPID public key from server
-      const response = await fetch('/api/push/vapid-public-key');
-      const { publicKey } = await response.json();
-      console.log('subscribeToPushNotifications: VAPID key received, length:', publicKey?.length);
+      try {
+        // Get VAPID public key from server
+        const response = await fetch('/api/push/vapid-public-key');
+        if (!response.ok) {
+          throw new Error(`VAPID key fetch failed: ${response.status}`);
+        }
+        const { publicKey } = await response.json();
+        console.log('subscribeToPushNotifications: VAPID key received, length:', publicKey?.length);
 
-      // Subscribe to push
-      console.log('subscribeToPushNotifications: Creating push subscription...');
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-      console.log('subscribeToPushNotifications: Push subscription created');
+        // Subscribe to push
+        console.log('subscribeToPushNotifications: Creating push subscription...');
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+        console.log('subscribeToPushNotifications: Push subscription created');
+      } catch (error) {
+        console.error('Error creating push subscription:', error);
+        await reportError('create_subscription', error);
+        throw error;
+      }
     }
 
     // Send subscription to server
     if (subscription) {
       console.log('subscribeToPushNotifications: Sending subscription to server...');
-      const subscriptionJSON = subscription.toJSON();
-      await apiRequest('POST', '/api/push/subscribe', {
-        endpoint: subscriptionJSON.endpoint,
-        p256dh: subscriptionJSON.keys?.p256dh,
-        auth: subscriptionJSON.keys?.auth,
-      });
+      try {
+        const subscriptionJSON = subscription.toJSON();
+        await apiRequest('POST', '/api/push/subscribe', {
+          endpoint: subscriptionJSON.endpoint,
+          p256dh: subscriptionJSON.keys?.p256dh,
+          auth: subscriptionJSON.keys?.auth,
+        });
 
-      console.log('Successfully subscribed to push notifications');
+        console.log('Successfully subscribed to push notifications');
+      } catch (error) {
+        console.error('Error sending subscription to server:', error);
+        await reportError('send_to_server', error);
+        throw error;
+      }
     }
   } catch (error) {
     console.error('Error subscribing to push notifications:', error);
+    await reportError('general', error);
   }
 }
 

@@ -1423,6 +1423,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PUSH SUBSCRIPTION ROUTES
   // ====================
 
+  // Debug endpoint to receive client-side push errors
+  app.post("/api/debug/push-error", (req, res) => {
+    const { step, error, stack, userAgent } = req.body;
+    console.log('🚨 CLIENT PUSH ERROR:');
+    console.log(`  Step: ${step}`);
+    console.log(`  Error: ${error}`);
+    console.log(`  User Agent: ${userAgent}`);
+    if (stack) {
+      console.log(`  Stack: ${stack}`);
+    }
+    res.json({ received: true });
+  });
+
   // Get VAPID public key for push subscription
   app.get("/api/push/vapid-public-key", (req, res) => {
     if (!process.env.VAPID_PUBLIC_KEY) {
