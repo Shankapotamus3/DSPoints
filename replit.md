@@ -45,11 +45,12 @@ Preferred communication style: Simple, everyday language.
 
 ## Push Notification System
 - **Web Push API**: Browser push notifications using service workers and VAPID authentication
-- **Notification Types**: Chore completion alerts (to admins), chore approval confirmations (to users), and reward claim notifications (to admins)
+- **Notification Types**: Chore completion alerts (to admins), chore approval confirmations (to users), reward claim notifications (to admins), and new message alerts
 - **Subscription Management**: Automatic subscription on login with graceful degradation if permissions denied
 - **Cleanup Strategy**: Stale push subscriptions (HTTP 410) automatically removed when sending fails
 - **Security**: VAPID keys (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY) required for authentication
 - **User Experience**: Non-intrusive permission requests with 1-second delay after login
+- **Foreground Handling**: Service worker detects when app is visible and ensures notifications still display (critical for Android PWAs where foreground notifications can be suppressed)
 
 ## Chore Completion Workflow
 - **Flexible Completion**: Any user can complete any chore regardless of assignment

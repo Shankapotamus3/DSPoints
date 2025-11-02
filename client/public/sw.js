@@ -301,7 +301,28 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    // Check if app is in foreground
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const visibleClient = clientList.find(c => c.visibilityState === 'visible');
+      
+      if (visibleClient) {
+        // App is in foreground - send message to app for in-app notification
+        console.log('Service Worker: App is visible, sending message to app');
+        visibleClient.postMessage({
+          type: 'PUSH_RECEIVED',
+          title: title,
+          message: data.message || 'You have a new notification',
+          data: data
+        });
+        // Still show notification for important events (can be customized)
+        // This ensures users don't miss critical notifications even when app is open
+        return self.registration.showNotification(title, options);
+      } else {
+        // App is in background - show notification normally
+        console.log('Service Worker: App is not visible, showing notification');
+        return self.registration.showNotification(title, options);
+      }
+    })
   );
 });
 
