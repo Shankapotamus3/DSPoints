@@ -1436,6 +1436,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ received: true });
   });
 
+  // Debug endpoint to receive subscription flow steps
+  app.post("/api/debug/push-step", (req, res) => {
+    const { step, data } = req.body;
+    console.log(`🔄 PUSH STEP: ${step}`, data ? JSON.stringify(data) : '');
+    res.json({ received: true });
+  });
+
   // Debug endpoint to receive client-side push errors
   app.post("/api/debug/push-error", (req, res) => {
     const { step, error, stack, userAgent } = req.body;

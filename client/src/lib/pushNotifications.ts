@@ -34,7 +34,23 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 export async function subscribeToPushNotifications(): Promise<void> {
   console.log('subscribeToPushNotifications: Starting subscription process...');
   
-  // Helper to send errors to server for debugging
+  // Helper to report progress/errors to server for debugging
+  const reportStep = async (step: string, data: any = {}) => {
+    try {
+      await fetch('/api/debug/push-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step,
+          data,
+          userAgent: navigator.userAgent,
+        }),
+      });
+    } catch (e) {
+      // Ignore reporting errors
+    }
+  };
+  
   const reportError = async (step: string, error: any) => {
     try {
       await fetch('/api/debug/push-error', {
@@ -53,13 +69,21 @@ export async function subscribeToPushNotifications(): Promise<void> {
   };
   
   try {
+    await reportStep('start', {});
+    
     // Check if already granted
     console.log('subscribeToPushNotifications: Current permission:', Notification.permission);
+    await reportStep('check_permission', { permission: Notification.permission });
+    
     if (Notification.permission !== 'granted') {
       console.log('subscribeToPushNotifications: Requesting permission...');
+      await reportStep('requesting_permission', {});
+      
       try {
         const permission = await requestNotificationPermission();
         console.log('subscribeToPushNotifications: Permission result:', permission);
+        await reportStep('permission_result', { permission });
+        
         if (permission !== 'granted') {
           console.log('Push notification permission denied');
           await reportError('permission_denied', new Error(`Permission: ${permission}`));
