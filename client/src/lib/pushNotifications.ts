@@ -98,17 +98,22 @@ export async function subscribeToPushNotifications(): Promise<void> {
 
     // Get service worker registration
     console.log('subscribeToPushNotifications: Waiting for service worker...');
+    await reportStep('waiting_service_worker', {});
     const registration = await navigator.serviceWorker.ready;
     console.log('subscribeToPushNotifications: Service worker ready');
+    await reportStep('service_worker_ready', {});
 
     // Get existing subscription
     console.log('subscribeToPushNotifications: Checking for existing subscription...');
+    await reportStep('checking_existing_subscription', {});
     let subscription = await registration.pushManager.getSubscription();
     console.log('subscribeToPushNotifications: Existing subscription:', subscription ? 'found' : 'not found');
+    await reportStep('existing_subscription_check', { found: !!subscription });
 
     // If no subscription, create one
     if (!subscription) {
       console.log('subscribeToPushNotifications: Fetching VAPID public key...');
+      await reportStep('fetching_vapid_key', {});
       try {
         // Get VAPID public key from server
         const response = await fetch('/api/push/vapid-public-key');
@@ -117,14 +122,17 @@ export async function subscribeToPushNotifications(): Promise<void> {
         }
         const { publicKey } = await response.json();
         console.log('subscribeToPushNotifications: VAPID key received, length:', publicKey?.length);
+        await reportStep('vapid_key_received', { length: publicKey?.length });
 
         // Subscribe to push
         console.log('subscribeToPushNotifications: Creating push subscription...');
+        await reportStep('creating_push_subscription', {});
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         });
         console.log('subscribeToPushNotifications: Push subscription created');
+        await reportStep('push_subscription_created', {});
       } catch (error) {
         console.error('Error creating push subscription:', error);
         await reportError('create_subscription', error);
@@ -135,6 +143,7 @@ export async function subscribeToPushNotifications(): Promise<void> {
     // Send subscription to server
     if (subscription) {
       console.log('subscribeToPushNotifications: Sending subscription to server...');
+      await reportStep('sending_to_server', {});
       try {
         const subscriptionJSON = subscription.toJSON();
         await apiRequest('POST', '/api/push/subscribe', {
@@ -144,6 +153,7 @@ export async function subscribeToPushNotifications(): Promise<void> {
         });
 
         console.log('Successfully subscribed to push notifications');
+        await reportStep('subscription_complete', {});
       } catch (error) {
         console.error('Error sending subscription to server:', error);
         await reportError('send_to_server', error);
