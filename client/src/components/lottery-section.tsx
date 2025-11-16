@@ -28,11 +28,7 @@ export default function LotterySection() {
 
   const drawTicket = useMutation({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/lottery/draw', {}) as Promise<{
-        ticket: LotteryTicket;
-        user: { points: number };
-        netChange: number;
-      }>;
+      return await apiRequest('POST', '/api/lottery/draw', {});
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
