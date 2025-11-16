@@ -47,7 +47,14 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: (query) => {
+        // User data should always be fresh (refetch on page navigation)
+        if (query.queryKey[0] === '/api/user') {
+          return 0;
+        }
+        // All other data can be cached indefinitely
+        return Infinity;
+      },
       retry: false,
     },
     mutations: {
