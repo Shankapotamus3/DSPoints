@@ -31,6 +31,16 @@ export default function LotterySection() {
       return await apiRequest('POST', '/api/lottery/draw', {});
     },
     onSuccess: (data: any) => {
+      if (!data || !data.ticket) {
+        console.error("Invalid lottery response:", data);
+        toast({
+          title: "Error",
+          description: "Invalid response from server",
+          variant: "destructive",
+        });
+        return;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/lottery/tickets"] });
@@ -57,6 +67,7 @@ export default function LotterySection() {
       }
     },
     onError: (error: any) => {
+      console.error("Lottery draw error:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to draw lottery ticket",
@@ -69,10 +80,14 @@ export default function LotterySection() {
     setIsDrawing(true);
     setLastResult(null);
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    await drawTicket.mutateAsync();
-    setIsDrawing(false);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await drawTicket.mutateAsync();
+    } catch (error) {
+      console.error("Error in handleDraw:", error);
+    } finally {
+      setIsDrawing(false);
+    }
   };
 
   const canAfford = (user?.points ?? 0) >= LOTTERY_COST;
