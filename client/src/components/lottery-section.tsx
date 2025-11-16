@@ -49,18 +49,24 @@ export default function LotterySection() {
       setLastResult(data);
       
       const netChange = data.netChange;
-      if (netChange > 0) {
+      const hasSpecialReward = data.ticket.specialReward;
+      
+      // Only show celebration for simple point gains/losses without special rewards
+      const isSimplePointChange = !hasSpecialReward;
+      
+      if (isSimplePointChange && netChange > 0) {
         toast({
           title: "🎉 You won!",
           description: `${data.ticket.outcome} (+${netChange} points)`,
         });
-      } else if (netChange < 0) {
+      } else if (isSimplePointChange && netChange < 0) {
         toast({
           title: "😞 Sorry!",
           description: `${data.ticket.outcome} (${netChange} points)`,
           variant: "destructive",
         });
       } else {
+        // Neutral message for special rewards or zero point changes
         toast({
           title: "🎟️ Lottery Result",
           description: data.ticket.outcome,
