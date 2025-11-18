@@ -1837,15 +1837,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } else {
               player2PointsAwarded = winPoints;
             }
-          } else if (winner && winner.isAdmin) {
-            // Admin win: use standard 1:10 ratio
-            const winPoints = calculatePointsAwarded(winnerScore);
-            if (isWinnerPlayer1) {
-              player1PointsAwarded = winPoints;
-            } else {
-              player2PointsAwarded = winPoints;
-            }
           }
+          // Admin wins get no points
           
           // Loser handling
           if (loser && !loser.isAdmin) {

@@ -116,7 +116,11 @@ Required for Railway deployment (documented in CLOUDINARY_SETUP.md):
 - **13 Categories**: Upper section (ones through sixes), lower section (3-of-kind, 4-of-kind, full house, small straight, large straight, Yahtzee, chance)
 - **Upper Section Bonus**: 35 bonus points awarded when upper section total ≥63 points
 - **Yahtzee Bonus**: 100 points awarded for each additional Yahtzee scored after the first (tracked separately in scorecard)
-- **Points Integration**: Games award 1 ChoreRewards point per 10 Yahtzee points scored (rounded down)
+- **ChoreRewards Points Integration**:
+  - **Non-admin wins**: 1 base point + 1 point per 10-point victory margin
+  - **Admin wins**: No points awarded
+  - **Non-admin losses**: Punishment assigned (no points)
+  - **Admin losses**: Points awarded at 1:10 ratio (1 point per 10 Yahtzee points scored)
 
 ## Technical Implementation
 - **Database Schema**: `yahtzeeGames` table stores game state (dice, held dice, scorecard, yahtzee bonus count, final score)
