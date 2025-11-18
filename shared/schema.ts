@@ -111,15 +111,20 @@ export const lotteryTickets = pgTable("lottery_tickets", {
 
 export const yahtzeeGames = pgTable("yahtzee_games", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  player1Id: varchar("player1_id").notNull().references(() => users.id),
+  player2Id: varchar("player2_id").notNull().references(() => users.id),
+  currentPlayerId: varchar("current_player_id").notNull().references(() => users.id),
   status: text("status").notNull().default("active"), // 'active' or 'completed'
-  dice: text("dice").notNull(), // JSON string of current dice values [1-6, 1-6, 1-6, 1-6, 1-6]
-  heldDice: text("held_dice").notNull(), // JSON string of boolean array for which dice are held
+  dice: text("dice").notNull().default("[]"), // JSON string of current dice values, empty until first roll
+  heldDice: text("held_dice").notNull().default("[false,false,false,false,false]"), // JSON string of boolean array
   rollsRemaining: integer("rolls_remaining").notNull().default(3),
-  scorecard: text("scorecard").notNull(), // JSON string of scorecard object
-  yahtzeeBonus: integer("yahtzee_bonus").notNull().default(0), // Count of bonus Yahtzees (100 points each)
-  finalScore: integer("final_score"),
-  pointsAwarded: integer("points_awarded"),
+  player1Scorecard: text("player1_scorecard").notNull(), // JSON string of player 1's scorecard
+  player2Scorecard: text("player2_scorecard").notNull(), // JSON string of player 2's scorecard
+  player1YahtzeeBonus: integer("player1_yahtzee_bonus").notNull().default(0),
+  player2YahtzeeBonus: integer("player2_yahtzee_bonus").notNull().default(0),
+  winnerId: varchar("winner_id").references(() => users.id), // Set when game completes
+  player1FinalScore: integer("player1_final_score"),
+  player2FinalScore: integer("player2_final_score"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   completedAt: timestamp("completed_at"),
 });
