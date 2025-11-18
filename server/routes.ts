@@ -5,16 +5,13 @@ import { insertChoreSchema, insertRewardSchema, insertTransactionSchema, insertU
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { shouldUseCloudinary, getCloudinaryUploadSignature, isCloudinaryConfigured } from "./cloudinaryStorage";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { db } from "./db";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import webpush from "web-push";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
 
 // Extend express-session types
 declare module 'express-session' {
@@ -1950,28 +1947,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // DELETE THIS AFTER RUNNING ON RAILWAY
   app.post("/api/admin/run-migration", requireAuth, requireAdmin, async (req, res) => {
     try {
-      console.log("🔧 Running database migration...");
-      const { stdout, stderr } = await execAsync("npm run db:push -- --force");
+      console.log("🔧 Running database migration via SQL...");
       
-      console.log("✅ Migration output:", stdout);
-      if (stderr) {
-        console.log("⚠️ Migration stderr:", stderr);
-      }
+      // Create yahtzee_games table if it doesn't exist
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS yahtzee_games (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          player1_id VARCHAR NOT NULL REFERENCES users(id),
+          player2_id VARCHAR NOT NULL REFERENCES users(id),
+          current_player_id VARCHAR NOT NULL REFERENCES users(id),
+          dice TEXT NOT NULL DEFAULT '[]',
+          held_dice TEXT NOT NULL DEFAULT '[false,false,false,false,false]',
+          rolls_remaining INTEGER NOT NULL DEFAULT 3,
+          player1_scorecard TEXT NOT NULL,
+          player2_scorecard TEXT NOT NULL,
+          player1_yahtzee_bonus INTEGER NOT NULL DEFAULT 0,
+          player2_yahtzee_bonus INTEGER NOT NULL DEFAULT 0,
+          status VARCHAR NOT NULL DEFAULT 'active',
+          winner_id VARCHAR REFERENCES users(id),
+          player1_final_score INTEGER,
+          player2_final_score INTEGER,
+          created_at TIMESTAMP NOT NULL DEFAULT now(),
+          updated_at TIMESTAMP NOT NULL DEFAULT now()
+        );
+      `);
+      
+      // Add user_id column to punishments if it doesn't exist
+      await db.execute(sql`
+        ALTER TABLE punishments 
+        ADD COLUMN IF NOT EXISTS user_id VARCHAR REFERENCES users(id);
+      `);
+      
+      console.log("✅ Migration completed successfully");
       
       res.json({ 
         success: true, 
-        message: "Database migration completed successfully",
-        output: stdout,
-        stderr: stderr || null
+        message: "Database migration completed successfully. Tables created!"
       });
     } catch (error: any) {
       console.error("❌ Migration failed:", error);
       res.status(500).json({ 
         success: false,
         message: "Migration failed", 
-        error: error.message,
-        output: error.stdout || null,
-        stderr: error.stderr || null
+        error: error.message
       });
     }
   });

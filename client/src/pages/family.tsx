@@ -147,7 +147,7 @@ export default function Family() {
                 <div>
                   <h3 className="font-semibold text-orange-900 dark:text-orange-100">⚠️ Database Migration Required</h3>
                   <p className="text-sm text-orange-700 dark:text-orange-300">
-                    Click this button to update the Railway database. Delete this button and the backend endpoint after use.
+                    Click to create missing database tables (yahtzee_games, user_id column). Only needed once on Railway.
                   </p>
                 </div>
                 <Button 
