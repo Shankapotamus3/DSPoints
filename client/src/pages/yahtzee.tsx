@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Trophy, RotateCcw, Users } from "lucide-react";
@@ -455,14 +456,30 @@ export default function YahtzeePage() {
   };
 
   const opponentUser = users?.find(u => u.id === (isPlayer1 ? currentGame.player2Id : currentGame.player1Id));
+  const player1User = users?.find(u => u.id === currentGame.player1Id);
+  const player2User = users?.find(u => u.id === currentGame.player2Id);
 
   // Scorecard rendering function
-  const renderScorecard = (scorecard: Scorecard, yahtzeeBonus: number, isCurrentPlayer: boolean, label: string) => (
+  const renderScorecard = (scorecard: Scorecard, yahtzeeBonus: number, isCurrentPlayer: boolean, label: string, user: User | undefined) => (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>{label}</span>
-          <span className="text-lg font-mono">{calculateTotal(scorecard, yahtzeeBonus)}</span>
+        <CardTitle className="space-y-3">
+          <div className="flex items-center justify-center">
+            <Avatar className="w-16 h-16 text-3xl">
+              {user?.avatarType === "image" && user?.avatarUrl ? (
+                <AvatarImage 
+                  src={user.avatarUrl} 
+                  alt={`${user.displayName || user.username}'s avatar`}
+                  className="object-cover"
+                />
+              ) : null}
+              <AvatarFallback>{user?.avatar || "👤"}</AvatarFallback>
+            </Avatar>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>{label}</span>
+            <span className="text-lg font-mono">{calculateTotal(scorecard, yahtzeeBonus)}</span>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -637,8 +654,8 @@ export default function YahtzeePage() {
 
       {/* Scorecards - Side by Side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {renderScorecard(myScorecard, myYahtzeeBonus, true, "Your Scorecard")}
-        {renderScorecard(opponentScorecard, opponentYahtzeeBonus, false, `${opponentUser?.displayName || opponentUser?.username || "Opponent"}'s Scorecard`)}
+        {renderScorecard(myScorecard, myYahtzeeBonus, true, "Your Scorecard", currentUser)}
+        {renderScorecard(opponentScorecard, opponentYahtzeeBonus, false, `${opponentUser?.displayName || opponentUser?.username || "Opponent"}'s Scorecard`, opponentUser)}
       </div>
     </div>
   );
