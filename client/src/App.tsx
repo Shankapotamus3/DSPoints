@@ -8,6 +8,7 @@ import NotFound from "./pages/not-found";
 import Dashboard from "./pages/dashboard";
 import Chores from "./pages/chores";
 import Rewards from "./pages/rewards";
+import Yahtzee from "./pages/yahtzee";
 import Messages from "./pages/messages";
 import Punishments from "./pages/punishments";
 import Family from "./pages/family";
@@ -59,6 +60,9 @@ function Router() {
       </Route>
       <Route path="/rewards">
         {() => <ProtectedRoute component={Rewards} />}
+      </Route>
+      <Route path="/yahtzee">
+        {() => <ProtectedRoute component={Yahtzee} />}
       </Route>
       <Route path="/messages">
         {() => <ProtectedRoute component={Messages} />}

@@ -109,6 +109,21 @@ export const lotteryTickets = pgTable("lottery_tickets", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+export const yahtzeeGames = pgTable("yahtzee_games", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("active"), // 'active' or 'completed'
+  dice: text("dice").notNull(), // JSON string of current dice values [1-6, 1-6, 1-6, 1-6, 1-6]
+  heldDice: text("held_dice").notNull(), // JSON string of boolean array for which dice are held
+  rollsRemaining: integer("rolls_remaining").notNull().default(3),
+  scorecard: text("scorecard").notNull(), // JSON string of scorecard object
+  yahtzeeBonus: integer("yahtzee_bonus").notNull().default(0), // Count of bonus Yahtzees (100 points each)
+  finalScore: integer("final_score"),
+  pointsAwarded: integer("points_awarded"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  completedAt: timestamp("completed_at"),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   points: true,
@@ -194,6 +209,12 @@ export const insertLotteryTicketSchema = createInsertSchema(lotteryTickets).omit
   createdAt: true,
 });
 
+export const insertYahtzeeGameSchema = createInsertSchema(yahtzeeGames).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
 export const choreApprovalSchema = z.object({
   comment: z.string().optional(),
 });
@@ -238,6 +259,8 @@ export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertLotteryTicket = z.infer<typeof insertLotteryTicketSchema>;
 export type LotteryTicket = typeof lotteryTickets.$inferSelect;
+export type InsertYahtzeeGame = z.infer<typeof insertYahtzeeGameSchema>;
+export type YahtzeeGame = typeof yahtzeeGames.$inferSelect;
 export type ChoreApproval = z.infer<typeof choreApprovalSchema>;
 export type PointAdjustment = z.infer<typeof pointAdjustmentSchema>;
 export type ChoreCompletion = z.infer<typeof choreCompletionSchema>;
@@ -246,3 +269,4 @@ export type ChoreCompletion = z.infer<typeof choreCompletionSchema>;
 export type ChoreStatus = 'pending' | 'completed' | 'approved' | 'rejected';
 export type NotificationType = 'chore_completed' | 'chore_approved' | 'chore_rejected';
 export type AvatarType = 'emoji' | 'image';
+export type YahtzeeGameStatus = 'active' | 'completed';

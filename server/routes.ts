@@ -1614,6 +1614,215 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // YAHTZEE GAME ROUTES
+
+  // Get current active game
+  app.get("/api/yahtzee/current", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const game = await storage.getCurrentYahtzeeGame(userId);
+      res.json(game);
+    } catch (error) {
+      console.error("Error getting current yahtzee game:", error);
+      res.status(500).json({ message: "Failed to get current game" });
+    }
+  });
+
+  // Start a new game
+  app.post("/api/yahtzee/start", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      
+      // Check if user already has an active game
+      const existingGame = await storage.getCurrentYahtzeeGame(userId);
+      if (existingGame) {
+        return res.status(400).json({ message: "You already have an active game" });
+      }
+
+      const { initializeGame } = await import('./yahtzee.js');
+      const gameState = initializeGame();
+      
+      const game = await storage.createYahtzeeGame({
+        userId,
+        status: 'active',
+        dice: JSON.stringify(gameState.dice),
+        heldDice: JSON.stringify(gameState.heldDice),
+        rollsRemaining: gameState.rollsRemaining,
+        scorecard: JSON.stringify(gameState.scorecard),
+        yahtzeeBonus: 0,
+        finalScore: null,
+        pointsAwarded: null,
+      });
+
+      res.json(game);
+    } catch (error) {
+      console.error("Error starting yahtzee game:", error);
+      res.status(500).json({ message: "Failed to start game" });
+    }
+  });
+
+  // Roll dice
+  app.post("/api/yahtzee/roll", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { gameId, heldDice } = req.body;
+
+      // Validate input
+      if (!Array.isArray(heldDice) || heldDice.length !== 5) {
+        return res.status(400).json({ message: "heldDice must be an array of 5 booleans" });
+      }
+      if (!heldDice.every(h => typeof h === 'boolean')) {
+        return res.status(400).json({ message: "All heldDice values must be boolean" });
+      }
+
+      const game = await storage.getYahtzeeGame(gameId);
+      if (!game || game.userId !== userId) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+
+      if (game.status !== 'active') {
+        return res.status(400).json({ message: "Game is not active" });
+      }
+
+      if (game.rollsRemaining <= 0) {
+        return res.status(400).json({ message: "No rolls remaining" });
+      }
+
+      const { rollDice } = await import('./yahtzee.js');
+      const currentDice = JSON.parse(game.dice);
+      const newDice = rollDice(currentDice, heldDice);
+
+      const updatedGame = await storage.updateYahtzeeGame(gameId, {
+        dice: JSON.stringify(newDice),
+        heldDice: JSON.stringify(heldDice),
+        rollsRemaining: game.rollsRemaining - 1,
+      });
+
+      res.json(updatedGame);
+    } catch (error) {
+      console.error("Error rolling dice:", error);
+      res.status(500).json({ message: "Failed to roll dice" });
+    }
+  });
+
+  // Score a category
+  app.post("/api/yahtzee/score", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { gameId, category } = req.body;
+
+      // Validate category
+      const validCategories = ['ones', 'twos', 'threes', 'fours', 'fives', 'sixes', 
+                               'threeOfAKind', 'fourOfAKind', 'fullHouse', 
+                               'smallStraight', 'largeStraight', 'yahtzee', 'chance'];
+      if (!validCategories.includes(category)) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+
+      const game = await storage.getYahtzeeGame(gameId);
+      if (!game || game.userId !== userId) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+
+      if (game.status !== 'active') {
+        return res.status(400).json({ message: "Game is not active" });
+      }
+
+      const { calculateCategoryScore, calculateFinalScore, isGameComplete, calculatePointsAwarded, rollDice, isYahtzee } = await import('./yahtzee.js');
+      
+      const dice = JSON.parse(game.dice);
+      const scorecard = JSON.parse(game.scorecard);
+      let yahtzeeBonus = game.yahtzeeBonus || 0;
+
+      // Check if category already filled
+      if (scorecard[category] !== null) {
+        return res.status(400).json({ message: "Category already scored" });
+      }
+
+      // Check for Yahtzee bonus (additional Yahtzees after first)
+      if (isYahtzee(dice) && scorecard.yahtzee !== null && scorecard.yahtzee > 0) {
+        yahtzeeBonus += 1;
+      }
+
+      // Calculate and set the score for this category
+      const score = calculateCategoryScore(dice, category);
+      scorecard[category] = score;
+
+      // Check if game is complete
+      const gameComplete = isGameComplete(scorecard);
+      let finalScore = null;
+      let pointsAwarded = null;
+      let updatedUser = null;
+
+      if (gameComplete) {
+        finalScore = calculateFinalScore(scorecard, yahtzeeBonus);
+        pointsAwarded = calculatePointsAwarded(finalScore);
+
+        // Award points to user
+        const user = await storage.getUser(userId);
+        await storage.updateUserPoints(userId, user!.points + pointsAwarded);
+
+        // Create transaction record
+        await storage.createTransaction({
+          userId,
+          type: 'earn',
+          amount: pointsAwarded,
+          description: `Yahtzee game completed - Score: ${finalScore}`,
+        });
+
+        updatedUser = await storage.getUser(userId);
+      }
+
+      // Update game - reset for next turn if not complete, or mark as complete
+      let updateData: any = {
+        scorecard: JSON.stringify(scorecard),
+        yahtzeeBonus,
+      };
+
+      if (gameComplete) {
+        updateData = {
+          ...updateData,
+          status: 'completed',
+          finalScore,
+          pointsAwarded,
+          completedAt: new Date(),
+        };
+      } else {
+        // Reset for next turn - perform first roll automatically
+        const newDice = rollDice([1, 1, 1, 1, 1], [false, false, false, false, false]);
+        updateData = {
+          ...updateData,
+          rollsRemaining: 2, // Already rolled once
+          dice: JSON.stringify(newDice),
+          heldDice: JSON.stringify([false, false, false, false, false]),
+        };
+      }
+
+      const updatedGame = await storage.updateYahtzeeGame(gameId, updateData);
+
+      res.json({
+        game: updatedGame,
+        user: updatedUser,
+        gameComplete,
+      });
+    } catch (error) {
+      console.error("Error scoring category:", error);
+      res.status(500).json({ message: "Failed to score category" });
+    }
+  });
+
+  // Get game history
+  app.get("/api/yahtzee/games", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const games = await storage.getYahtzeeGames(userId);
+      res.json(games);
+    } catch (error) {
+      console.error("Error getting yahtzee games:", error);
+      res.status(500).json({ message: "Failed to get games" });
+    }
+  });
+
   const httpServer = createServer(app);
   console.log("🚀 HTTP server created successfully");
   return httpServer;

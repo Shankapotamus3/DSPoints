@@ -17,6 +17,8 @@ import {
   type InsertPushSubscription,
   type LotteryTicket,
   type InsertLotteryTicket,
+  type YahtzeeGame,
+  type InsertYahtzeeGame,
   type ChoreStatus,
   users,
   chores,
@@ -26,7 +28,8 @@ import {
   messages,
   punishments,
   pushSubscriptions,
-  lotteryTickets
+  lotteryTickets,
+  yahtzeeGames
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, or, and, desc, lte } from "drizzle-orm";
@@ -96,6 +99,13 @@ export interface IStorage {
   // Lottery ticket methods
   getLotteryTickets(userId: string): Promise<LotteryTicket[]>;
   createLotteryTicket(ticket: InsertLotteryTicket): Promise<LotteryTicket>;
+
+  // Yahtzee game methods
+  getCurrentYahtzeeGame(userId: string): Promise<YahtzeeGame | undefined>;
+  getYahtzeeGame(id: string): Promise<YahtzeeGame | undefined>;
+  getYahtzeeGames(userId: string): Promise<YahtzeeGame[]>;
+  createYahtzeeGame(game: InsertYahtzeeGame): Promise<YahtzeeGame>;
+  updateYahtzeeGame(id: string, updates: Partial<YahtzeeGame>): Promise<YahtzeeGame | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -538,6 +548,53 @@ export class DatabaseStorage implements IStorage {
       .values(ticket)
       .returning();
     return lotteryTicket;
+  }
+
+  // Yahtzee game methods
+  async getCurrentYahtzeeGame(userId: string): Promise<YahtzeeGame | undefined> {
+    const [game] = await db
+      .select()
+      .from(yahtzeeGames)
+      .where(and(
+        eq(yahtzeeGames.userId, userId),
+        eq(yahtzeeGames.status, 'active')
+      ))
+      .orderBy(desc(yahtzeeGames.createdAt))
+      .limit(1);
+    return game || undefined;
+  }
+
+  async getYahtzeeGame(id: string): Promise<YahtzeeGame | undefined> {
+    const [game] = await db
+      .select()
+      .from(yahtzeeGames)
+      .where(eq(yahtzeeGames.id, id));
+    return game || undefined;
+  }
+
+  async getYahtzeeGames(userId: string): Promise<YahtzeeGame[]> {
+    return await db
+      .select()
+      .from(yahtzeeGames)
+      .where(eq(yahtzeeGames.userId, userId))
+      .orderBy(desc(yahtzeeGames.createdAt));
+  }
+
+  async createYahtzeeGame(game: InsertYahtzeeGame): Promise<YahtzeeGame> {
+    const [yahtzeeGame] = await db
+      .insert(yahtzeeGames)
+      .values(game)
+      .returning();
+    return yahtzeeGame;
+  }
+
+  async updateYahtzeeGame(id: string, updates: Partial<YahtzeeGame>): Promise<YahtzeeGame | undefined> {
+    const [game] = await db
+      .update(yahtzeeGames)
+      .set(updates)
+      .where(eq(yahtzeeGames.id, id))
+      .returning();
+    return game || undefined;
   }
 }
 
