@@ -1,6 +1,6 @@
 # Overview
 
-ChoreRewards is a gamified task management application that helps users stay motivated by earning points for completing chores and spending those points on rewards. Built with React (frontend) and Express (backend), the application features a modern UI using shadcn/ui components, real-time progress tracking, and a points-based reward system. Users can create and manage chores, set custom rewards, and track their transaction history in an engaging, game-like interface.
+ChoreRewards is a gamified task management application that helps users stay motivated by earning points for completing chores and spending those points on rewards. Built with React (frontend) and Express (backend), the application features a modern UI using shadcn/ui components, real-time progress tracking, a points-based reward system, lottery ticket system, punishment tracking, messaging, and a full Yahtzee dice game. Users can create and manage chores, set custom rewards, play games to earn points, and track their transaction history in an engaging, game-like interface.
 
 # User Preferences
 
@@ -103,6 +103,26 @@ Required for Railway deployment (documented in CLOUDINARY_SETUP.md):
 - Free tier: 25GB storage, 25GB bandwidth/month
 - Automatic image optimization and WebP conversion
 - Folder organization: `avatars/{userId}/` and `messages/`
+
+# Yahtzee Game System
+
+## Game Mechanics
+- **Full Yahtzee Implementation**: Complete 13-category scorecard following classic Yahtzee rules
+- **Interactive Dice Rolling**: Players can hold/release individual dice across up to 3 rolls per turn
+- **Automatic Game Flow**: Games start with first roll already completed, automatic re-roll after scoring categories
+- **State Synchronization**: Frontend heldDice state syncs with backend after every roll and score operation
+
+## Scoring System
+- **13 Categories**: Upper section (ones through sixes), lower section (3-of-kind, 4-of-kind, full house, small straight, large straight, Yahtzee, chance)
+- **Upper Section Bonus**: 35 bonus points awarded when upper section total ≥63 points
+- **Yahtzee Bonus**: 100 points awarded for each additional Yahtzee scored after the first (tracked separately in scorecard)
+- **Points Integration**: Games award 1 ChoreRewards point per 10 Yahtzee points scored (rounded down)
+
+## Technical Implementation
+- **Database Schema**: `yahtzeeGames` table stores game state (dice, held dice, scorecard, yahtzee bonus count, final score)
+- **Backend Logic**: `server/yahtzee.ts` contains all scoring algorithms and game state transitions
+- **Input Validation**: Zod schemas validate all API requests (roll dice, score category)
+- **Transaction Tracking**: Points awarded from Yahtzee games are recorded in transactions with type "yahtzee_win"
 
 # External Dependencies
 
