@@ -1851,19 +1851,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               text: `Lost Yahtzee game to ${winner!.displayName || winner!.username} (${loserScore} - ${winnerScore})`,
               isCompleted: false,
             });
-          } else if (loser && loser.isAdmin) {
-            // Admin loss: still get points based on score
-            const losePoints = calculatePointsAwarded(loserScore);
-            if (isWinnerPlayer1) {
-              player2PointsAwarded = losePoints;
-            } else {
-              player1PointsAwarded = losePoints;
-            }
           }
+          // Admin losses get no points
         } else {
-          // Tie - award points based on score for both
-          player1PointsAwarded = calculatePointsAwarded(player1FinalScore);
-          player2PointsAwarded = calculatePointsAwarded(player2FinalScore);
+          // Tie - award points only to non-admins
+          if (player1 && !player1.isAdmin) {
+            player1PointsAwarded = calculatePointsAwarded(player1FinalScore);
+          }
+          if (player2 && !player2.isAdmin) {
+            player2PointsAwarded = calculatePointsAwarded(player2FinalScore);
+          }
         }
 
         // Award points to both players

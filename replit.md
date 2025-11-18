@@ -120,7 +120,7 @@ Required for Railway deployment (documented in CLOUDINARY_SETUP.md):
   - **Non-admin wins**: 1 base point + 1 point per 10-point victory margin
   - **Admin wins**: No points awarded
   - **Non-admin losses**: Punishment assigned (no points)
-  - **Admin losses**: Points awarded at 1:10 ratio (1 point per 10 Yahtzee points scored)
+  - **Admin losses**: No points awarded
 
 ## Technical Implementation
 - **Database Schema**: `yahtzeeGames` table stores game state (dice, held dice, scorecard, yahtzee bonus count, final score)
