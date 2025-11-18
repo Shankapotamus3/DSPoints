@@ -1632,6 +1632,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/yahtzee/start", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
+      const { opponentId } = req.body;
+
+      // Validate opponent exists and is not the same as current user
+      if (!opponentId || opponentId === userId) {
+        return res.status(400).json({ message: "Please select a valid opponent" });
+      }
+
+      const opponent = await storage.getUser(opponentId);
+      if (!opponent) {
+        return res.status(404).json({ message: "Opponent not found" });
+      }
       
       // Check if user already has an active game
       const existingGame = await storage.getCurrentYahtzeeGame(userId);
@@ -1639,19 +1650,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "You already have an active game" });
       }
 
-      const { initializeGame } = await import('./yahtzee.js');
-      const gameState = initializeGame();
+      const { initializeScorecard } = await import('./yahtzee.js');
+      const blankScorecard = initializeScorecard();
       
       const game = await storage.createYahtzeeGame({
-        userId,
+        player1Id: userId,
+        player2Id: opponentId,
+        currentPlayerId: userId, // Player 1 goes first
         status: 'active',
-        dice: JSON.stringify(gameState.dice),
-        heldDice: JSON.stringify(gameState.heldDice),
-        rollsRemaining: gameState.rollsRemaining,
-        scorecard: JSON.stringify(gameState.scorecard),
-        yahtzeeBonus: 0,
-        finalScore: null,
-        pointsAwarded: null,
+        dice: '[]', // Empty until first roll
+        heldDice: '[false,false,false,false,false]',
+        rollsRemaining: 3,
+        player1Scorecard: JSON.stringify(blankScorecard),
+        player2Scorecard: JSON.stringify(blankScorecard),
+        player1YahtzeeBonus: 0,
+        player2YahtzeeBonus: 0,
+        winnerId: null,
+        player1FinalScore: null,
+        player2FinalScore: null,
       });
 
       res.json(game);
@@ -1676,8 +1692,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const game = await storage.getYahtzeeGame(gameId);
-      if (!game || game.userId !== userId) {
+      if (!game || (game.player1Id !== userId && game.player2Id !== userId)) {
         return res.status(404).json({ message: "Game not found" });
+      }
+
+      // Validate it's this player's turn
+      if (game.currentPlayerId !== userId) {
+        return res.status(403).json({ message: "It's not your turn" });
       }
 
       if (game.status !== 'active') {
@@ -1720,19 +1741,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const game = await storage.getYahtzeeGame(gameId);
-      if (!game || game.userId !== userId) {
+      if (!game || (game.player1Id !== userId && game.player2Id !== userId)) {
         return res.status(404).json({ message: "Game not found" });
+      }
+
+      // Validate it's this player's turn
+      if (game.currentPlayerId !== userId) {
+        return res.status(403).json({ message: "It's not your turn" });
       }
 
       if (game.status !== 'active') {
         return res.status(400).json({ message: "Game is not active" });
       }
 
-      const { calculateCategoryScore, calculateFinalScore, isGameComplete, calculatePointsAwarded, rollDice, isYahtzee } = await import('./yahtzee.js');
+      const { calculateCategoryScore, calculateFinalScore, isGameComplete, calculatePointsAwarded, isYahtzee } = await import('./yahtzee.js');
       
       const dice = JSON.parse(game.dice);
-      const scorecard = JSON.parse(game.scorecard);
-      let yahtzeeBonus = game.yahtzeeBonus || 0;
+      const isPlayer1 = game.player1Id === userId;
+      
+      // Get current player's scorecard and yahtzee bonus
+      const scorecard = JSON.parse(isPlayer1 ? game.player1Scorecard : game.player2Scorecard);
+      let yahtzeeBonus = isPlayer1 ? game.player1YahtzeeBonus : game.player2YahtzeeBonus;
 
       // Check if category already filled
       if (scorecard[category] !== null) {
@@ -1748,53 +1777,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const score = calculateCategoryScore(dice, category);
       scorecard[category] = score;
 
-      // Check if game is complete
-      const gameComplete = isGameComplete(scorecard);
-      let finalScore = null;
-      let pointsAwarded = null;
-      let updatedUser = null;
+      // Check if both players have completed their scorecards
+      const currentPlayerComplete = isGameComplete(scorecard);
+      const player1Scorecard = isPlayer1 ? scorecard : JSON.parse(game.player1Scorecard);
+      const player2Scorecard = isPlayer1 ? JSON.parse(game.player2Scorecard) : scorecard;
+      const bothPlayersComplete = isGameComplete(player1Scorecard) && isGameComplete(player2Scorecard);
+      
+      let updateData: any = {};
 
-      if (gameComplete) {
-        finalScore = calculateFinalScore(scorecard, yahtzeeBonus);
-        pointsAwarded = calculatePointsAwarded(finalScore);
-
-        // Award points to user
-        const user = await storage.getUser(userId);
-        await storage.updateUserPoints(userId, user!.points + pointsAwarded);
-
-        // Create transaction record
-        await storage.createTransaction({
-          userId,
-          type: 'earn',
-          amount: pointsAwarded,
-          description: `Yahtzee game completed - Score: ${finalScore}`,
-        });
-
-        updatedUser = await storage.getUser(userId);
+      // Update current player's scorecard and bonus
+      if (isPlayer1) {
+        updateData.player1Scorecard = JSON.stringify(scorecard);
+        updateData.player1YahtzeeBonus = yahtzeeBonus;
+      } else {
+        updateData.player2Scorecard = JSON.stringify(scorecard);
+        updateData.player2YahtzeeBonus = yahtzeeBonus;
       }
 
-      // Update game - reset for next turn if not complete, or mark as complete
-      let updateData: any = {
-        scorecard: JSON.stringify(scorecard),
-        yahtzeeBonus,
-      };
+      if (bothPlayersComplete) {
+        // Game is complete - calculate final scores and determine winner
+        const player1FinalScore = calculateFinalScore(player1Scorecard, game.player1YahtzeeBonus);
+        const player2FinalScore = calculateFinalScore(player2Scorecard, game.player2YahtzeeBonus);
+        const winnerId = player1FinalScore > player2FinalScore ? game.player1Id : 
+                         (player2FinalScore > player1FinalScore ? game.player2Id : null);
+        
+        const player1PointsAwarded = calculatePointsAwarded(player1FinalScore);
+        const player2PointsAwarded = calculatePointsAwarded(player2FinalScore);
 
-      if (gameComplete) {
+        // Award points to both players
+        const player1 = await storage.getUser(game.player1Id);
+        const player2 = await storage.getUser(game.player2Id);
+        
+        await storage.updateUserPoints(game.player1Id, player1!.points + player1PointsAwarded);
+        await storage.updateUserPoints(game.player2Id, player2!.points + player2PointsAwarded);
+
+        // Create transaction records for both players
+        await storage.createTransaction({
+          userId: game.player1Id,
+          type: 'earn',
+          amount: player1PointsAwarded,
+          description: `Yahtzee game vs ${player2!.displayName || player2!.username} - Score: ${player1FinalScore}`,
+        });
+        await storage.createTransaction({
+          userId: game.player2Id,
+          type: 'earn',
+          amount: player2PointsAwarded,
+          description: `Yahtzee game vs ${player1!.displayName || player1!.username} - Score: ${player2FinalScore}`,
+        });
+
         updateData = {
           ...updateData,
           status: 'completed',
-          finalScore,
-          pointsAwarded,
+          winnerId,
+          player1FinalScore,
+          player2FinalScore,
           completedAt: new Date(),
         };
       } else {
-        // Reset for next turn - perform first roll automatically
-        const newDice = rollDice([1, 1, 1, 1, 1], [false, false, false, false, false]);
+        // Switch turns to the other player, reset dice for next turn (no auto-roll)
+        const nextPlayerId = isPlayer1 ? game.player2Id : game.player1Id;
         updateData = {
           ...updateData,
-          rollsRemaining: 2, // Already rolled once
-          dice: JSON.stringify(newDice),
-          heldDice: JSON.stringify([false, false, false, false, false]),
+          currentPlayerId: nextPlayerId,
+          rollsRemaining: 3,
+          dice: '[]', // Empty until next player rolls
+          heldDice: '[false,false,false,false,false]',
         };
       }
 
@@ -1802,8 +1849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         game: updatedGame,
-        user: updatedUser,
-        gameComplete,
+        gameComplete: bothPlayersComplete,
       });
     } catch (error) {
       console.error("Error scoring category:", error);

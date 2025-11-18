@@ -556,7 +556,10 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(yahtzeeGames)
       .where(and(
-        eq(yahtzeeGames.userId, userId),
+        or(
+          eq(yahtzeeGames.player1Id, userId),
+          eq(yahtzeeGames.player2Id, userId)
+        ),
         eq(yahtzeeGames.status, 'active')
       ))
       .orderBy(desc(yahtzeeGames.createdAt))
@@ -576,7 +579,10 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(yahtzeeGames)
-      .where(eq(yahtzeeGames.userId, userId))
+      .where(or(
+        eq(yahtzeeGames.player1Id, userId),
+        eq(yahtzeeGames.player2Id, userId)
+      ))
       .orderBy(desc(yahtzeeGames.createdAt));
   }
 
