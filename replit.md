@@ -67,6 +67,14 @@ Preferred communication style: Simple, everyday language.
 - **Error Handling**: Runtime error overlay in development with proper error boundaries
 - **Build Process**: Separate client and server builds with optimized production bundles
 
+## Deployment Architecture
+- **Development Environment**: Hosted on Replit with Neon PostgreSQL database
+- **Production Environment**: Hosted on Railway with standard PostgreSQL database
+- **Database Driver Selection**: Automatic detection based on connection string
+  - Neon databases: Uses `@neondatabase/serverless` with WebSocket support
+  - Standard PostgreSQL (Railway): Uses `pg` with traditional connection pooling
+- **Manual Migrations on Railway**: Database schema changes are applied via direct SQL execution when deploying new features that require table modifications
+
 # Image Upload System
 
 ## Storage Backend Selection
