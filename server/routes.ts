@@ -1903,14 +1903,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           heldDice: '[false,false,false,false,false]',
         };
         
-        // Send push notification to next player
+        // Send push notification to next player with score details
         const currentPlayer = await storage.getUser(userId);
         const nextPlayer = await storage.getUser(nextPlayerId);
         if (nextPlayer && currentPlayer) {
+          // Convert category to readable name
+          const categoryNames: Record<string, string> = {
+            ones: "Ones",
+            twos: "Twos",
+            threes: "Threes",
+            fours: "Fours",
+            fives: "Fives",
+            sixes: "Sixes",
+            threeOfAKind: "Three of a Kind",
+            fourOfAKind: "Four of a Kind",
+            fullHouse: "Full House",
+            smallStraight: "Small Straight",
+            largeStraight: "Large Straight",
+            yahtzee: "Yahtzee",
+            chance: "Chance",
+          };
+          const categoryName = categoryNames[category] || category;
+          
           await sendPushNotification(
             nextPlayerId,
             "Your turn in Yahtzee!",
-            `${currentPlayer.displayName || currentPlayer.username} just finished their turn. It's your turn to roll!`,
+            `${currentPlayer.displayName || currentPlayer.username} scored ${score} on ${categoryName}. It's your turn to roll!`,
             "yahtzee_turn"
           );
         }
