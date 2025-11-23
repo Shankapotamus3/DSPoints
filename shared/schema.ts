@@ -203,9 +203,9 @@ export const insertPunishmentSchema = createInsertSchema(punishments)
     createdAt: true,
     completedAt: true,
   })
-  .augment({
+  .extend({
     number: z.number().int().min(1).max(59),
-    userId: z.string().uuid().nullable(),
+    userId: z.string().uuid().nullable().optional(),
   });
 
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
