@@ -1722,7 +1722,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No rolls remaining" });
       }
 
-      const { rollDice } = await import('./yahtzee.js');
       const currentDice = JSON.parse(game.dice);
       const newDice = rollDice(currentDice, heldDice);
 
@@ -1767,8 +1766,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Game is not active" });
       }
 
-      const { calculateCategoryScore, calculateFinalScore, isGameComplete, calculatePointsAwarded, isYahtzee } = await import('./yahtzee.js');
-      
       const dice = JSON.parse(game.dice);
       const isPlayer1 = game.player1Id === userId;
       
