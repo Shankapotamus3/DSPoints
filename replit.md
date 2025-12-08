@@ -152,6 +152,38 @@ Required for Railway deployment (documented in CLOUDINARY_SETUP.md):
 - **Input Validation**: Zod schemas validate all API requests (roll dice, score category)
 - **Transaction Tracking**: Points awarded from Yahtzee games are recorded in transactions with type "yahtzee_win"
 
+# 7-Card Draw Poker Game System
+
+## Game Mechanics
+- **Best of 19 Match**: First player to win 10 hands wins the entire game
+- **7-Card Draw**: Each player receives 7 cards and makes the best 5-card poker hand
+- **Simultaneous Play**: Both players lock in their hands, then results are revealed
+- **Round Progression**: New round starts automatically after each hand completes
+
+## Hand Rankings (Highest to Lowest)
+1. Royal Flush
+2. Straight Flush
+3. Four of a Kind
+4. Full House
+5. Flush
+6. Straight
+7. Three of a Kind
+8. Two Pair
+9. Pair
+10. High Card
+
+## Points and Rewards
+- **Non-admin Winner**: Earns points equal to (winner's wins - loser's wins)
+- **Admin Winner**: No points awarded to admin, but loser (if non-admin) receives a punishment
+- **Tie Rounds**: Neither player gets credit for the round; game continues
+
+## Technical Implementation
+- **Database Schema**: `pokerGames` tracks overall game state (player wins, status), `pokerRounds` tracks individual hands (cards, ready status, results)
+- **Backend Logic**: `server/poker.ts` contains deck shuffling, card dealing, hand evaluation, and comparison algorithms
+- **Seeded Randomness**: Each round uses a unique seed for reproducible card shuffles
+- **Best Hand Detection**: Automatically finds the best 5-card combination from 7 cards using combinatorial analysis
+- **Notifications**: Push notifications sent after each round and when game completes
+
 # External Dependencies
 
 ## Core Framework Dependencies

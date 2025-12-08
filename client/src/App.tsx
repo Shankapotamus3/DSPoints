@@ -13,6 +13,7 @@ import { subscribeToPushNotifications, isPushNotificationSupported } from "./lib
 const Chores = lazy(() => import("./pages/chores"));
 const Rewards = lazy(() => import("./pages/rewards"));
 const Yahtzee = lazy(() => import("./pages/yahtzee"));
+const Poker = lazy(() => import("./pages/poker"));
 const Messages = lazy(() => import("./pages/messages"));
 const Punishments = lazy(() => import("./pages/punishments"));
 const Family = lazy(() => import("./pages/family"));
@@ -75,6 +76,9 @@ function Router() {
       </Route>
       <Route path="/yahtzee">
         {() => <ProtectedRoute component={Yahtzee} />}
+      </Route>
+      <Route path="/poker">
+        {() => <ProtectedRoute component={Poker} />}
       </Route>
       <Route path="/messages">
         {() => <ProtectedRoute component={Messages} />}

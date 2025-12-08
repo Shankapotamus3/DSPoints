@@ -1957,6 +1957,344 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== POKER ROUTES ====================
+
+  // Get current poker game
+  app.get("/api/poker/current", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req)!;
+      const game = await storage.getCurrentPokerGame(userId);
+      if (game) {
+        const currentRound = await storage.getCurrentPokerRound(game.id);
+        const rounds = await storage.getPokerRoundsByGame(game.id);
+        res.json({ game, currentRound, rounds });
+      } else {
+        res.json({ game: null, currentRound: null, rounds: [] });
+      }
+    } catch (error) {
+      console.error("Error getting current poker game:", error);
+      res.status(500).json({ message: "Failed to get game" });
+    }
+  });
+
+  // Start a new poker game
+  app.post("/api/poker/start", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req)!;
+      const { opponentId } = req.body;
+
+      if (!opponentId) {
+        return res.status(400).json({ message: "Opponent ID is required" });
+      }
+
+      if (userId === opponentId) {
+        return res.status(400).json({ message: "Cannot play against yourself" });
+      }
+
+      const existingGame = await storage.getCurrentPokerGame(userId);
+      if (existingGame) {
+        return res.status(400).json({ message: "You already have an active poker game" });
+      }
+
+      const opponent = await storage.getUser(opponentId);
+      if (!opponent) {
+        return res.status(404).json({ message: "Opponent not found" });
+      }
+
+      const challenger = await storage.getUser(userId);
+
+      const game = await storage.createPokerGame({
+        player1Id: userId,
+        player2Id: opponentId,
+        status: 'active',
+        player1Wins: 0,
+        player2Wins: 0,
+        currentRound: 1,
+      });
+
+      const { generateRoundSeed, dealCards, cardsToStrings } = await import('./poker.js');
+      const seed = generateRoundSeed();
+      const { player1Cards, player2Cards } = dealCards(seed);
+
+      const round = await storage.createPokerRound({
+        gameId: game.id,
+        roundNumber: 1,
+        status: 'dealing',
+        deckSeed: seed,
+        player1Cards: JSON.stringify(cardsToStrings(player1Cards)),
+        player2Cards: JSON.stringify(cardsToStrings(player2Cards)),
+        player1Ready: false,
+        player2Ready: false,
+        isTie: false,
+      });
+
+      await sendPushNotification(
+        opponentId,
+        "Poker Challenge!",
+        `${challenger!.displayName || challenger!.username} has challenged you to a game of Poker!`,
+        "poker_challenge"
+      );
+
+      res.json({ game, currentRound: round });
+    } catch (error) {
+      console.error("Error starting poker game:", error);
+      res.status(500).json({ message: "Failed to start game" });
+    }
+  });
+
+  // Get specific poker game
+  app.get("/api/poker/game/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const game = await storage.getPokerGame(id);
+      if (!game) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+      const currentRound = await storage.getCurrentPokerRound(game.id);
+      const rounds = await storage.getPokerRoundsByGame(game.id);
+      res.json({ game, currentRound, rounds });
+    } catch (error) {
+      console.error("Error getting poker game:", error);
+      res.status(500).json({ message: "Failed to get game" });
+    }
+  });
+
+  // Player indicates they are ready (locks in their hand)
+  app.post("/api/poker/ready", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req)!;
+      const { gameId } = req.body;
+
+      const game = await storage.getPokerGame(gameId);
+      if (!game || game.status !== 'active') {
+        return res.status(404).json({ message: "Game not found or not active" });
+      }
+
+      const isPlayer1 = game.player1Id === userId;
+      const isPlayer2 = game.player2Id === userId;
+      if (!isPlayer1 && !isPlayer2) {
+        return res.status(403).json({ message: "You are not a player in this game" });
+      }
+
+      const round = await storage.getCurrentPokerRound(gameId);
+      if (!round) {
+        return res.status(404).json({ message: "No active round" });
+      }
+
+      const updateData: any = {};
+      if (isPlayer1) {
+        updateData.player1Ready = true;
+      } else {
+        updateData.player2Ready = true;
+      }
+
+      await storage.updatePokerRound(round.id, updateData);
+
+      const updatedRound = await storage.getPokerRound(round.id);
+      
+      if (updatedRound!.player1Ready && updatedRound!.player2Ready) {
+        const { stringsToCards, findBestHand, compareHands, cardsToStrings, WINS_TO_WIN_GAME, generateRoundSeed, dealCards } = await import('./poker.js');
+        
+        const player1Cards = stringsToCards(JSON.parse(updatedRound!.player1Cards));
+        const player2Cards = stringsToCards(JSON.parse(updatedRound!.player2Cards));
+        
+        const player1Hand = findBestHand(player1Cards);
+        const player2Hand = findBestHand(player2Cards);
+        
+        const comparison = compareHands(player1Hand, player2Hand);
+        
+        let roundWinnerId: string | null = null;
+        let isTie = false;
+        
+        if (comparison > 0) {
+          roundWinnerId = game.player1Id;
+        } else if (comparison < 0) {
+          roundWinnerId = game.player2Id;
+        } else {
+          isTie = true;
+        }
+
+        await storage.updatePokerRound(round.id, {
+          status: 'complete',
+          player1BestHand: JSON.stringify(cardsToStrings(player1Hand.cards)),
+          player2BestHand: JSON.stringify(cardsToStrings(player2Hand.cards)),
+          player1HandRank: player1Hand.name,
+          player2HandRank: player2Hand.name,
+          winnerId: roundWinnerId,
+          isTie,
+          completedAt: new Date(),
+        });
+
+        let newPlayer1Wins = game.player1Wins;
+        let newPlayer2Wins = game.player2Wins;
+        
+        if (roundWinnerId === game.player1Id) {
+          newPlayer1Wins++;
+        } else if (roundWinnerId === game.player2Id) {
+          newPlayer2Wins++;
+        }
+
+        const player1 = await storage.getUser(game.player1Id);
+        const player2 = await storage.getUser(game.player2Id);
+
+        const gameComplete = newPlayer1Wins >= WINS_TO_WIN_GAME || newPlayer2Wins >= WINS_TO_WIN_GAME;
+        
+        if (gameComplete) {
+          const gameWinnerId = newPlayer1Wins >= WINS_TO_WIN_GAME ? game.player1Id : game.player2Id;
+          const gameWinner = gameWinnerId === game.player1Id ? player1 : player2;
+          const gameLoser = gameWinnerId === game.player1Id ? player2 : player1;
+          const winnerWins = gameWinnerId === game.player1Id ? newPlayer1Wins : newPlayer2Wins;
+          const loserWins = gameWinnerId === game.player1Id ? newPlayer2Wins : newPlayer1Wins;
+
+          await storage.updatePokerGame(gameId, {
+            player1Wins: newPlayer1Wins,
+            player2Wins: newPlayer2Wins,
+            status: 'completed',
+            winnerId: gameWinnerId,
+            completedAt: new Date(),
+          });
+
+          if (!gameWinner!.isAdmin) {
+            const pointsAwarded = winnerWins - loserWins;
+            if (pointsAwarded > 0) {
+              await storage.updateUserPoints(gameWinnerId, gameWinner!.points + pointsAwarded);
+              await storage.createTransaction({
+                userId: gameWinnerId,
+                type: 'earn',
+                amount: pointsAwarded,
+                description: `Poker win vs ${gameLoser!.displayName || gameLoser!.username} (${winnerWins}-${loserWins})`,
+              });
+            }
+          }
+
+          if (gameWinner!.isAdmin && !gameLoser!.isAdmin) {
+            await storage.createPunishment({
+              userId: gameLoser!.id,
+              number: Math.floor(Math.random() * 59) + 1,
+              text: `Lost Poker game to ${gameWinner!.displayName || gameWinner!.username} (${loserWins}-${winnerWins})`,
+              isCompleted: false,
+            });
+          }
+
+          await sendPushNotification(
+            game.player1Id,
+            "Poker Game Complete!",
+            `Game over! ${gameWinner!.displayName || gameWinner!.username} wins ${winnerWins}-${loserWins}!`,
+            "poker_complete"
+          );
+          await sendPushNotification(
+            game.player2Id,
+            "Poker Game Complete!",
+            `Game over! ${gameWinner!.displayName || gameWinner!.username} wins ${winnerWins}-${loserWins}!`,
+            "poker_complete"
+          );
+
+          const finalGame = await storage.getPokerGame(gameId);
+          const finalRound = await storage.getPokerRound(round.id);
+          const allRounds = await storage.getPokerRoundsByGame(gameId);
+
+          return res.json({
+            game: finalGame,
+            currentRound: finalRound,
+            rounds: allRounds,
+            roundComplete: true,
+            gameComplete: true,
+          });
+        } else {
+          await storage.updatePokerGame(gameId, {
+            player1Wins: newPlayer1Wins,
+            player2Wins: newPlayer2Wins,
+            currentRound: game.currentRound + 1,
+          });
+
+          const newSeed = generateRoundSeed();
+          const { player1Cards: newP1Cards, player2Cards: newP2Cards } = dealCards(newSeed);
+
+          const newRound = await storage.createPokerRound({
+            gameId: game.id,
+            roundNumber: game.currentRound + 1,
+            status: 'dealing',
+            deckSeed: newSeed,
+            player1Cards: JSON.stringify(cardsToStrings(newP1Cards)),
+            player2Cards: JSON.stringify(cardsToStrings(newP2Cards)),
+            player1Ready: false,
+            player2Ready: false,
+            isTie: false,
+          });
+
+          const roundWinner = roundWinnerId ? (roundWinnerId === game.player1Id ? player1 : player2) : null;
+          const roundLoser = roundWinnerId ? (roundWinnerId === game.player1Id ? player2 : player1) : null;
+
+          const roundResultMessage = isTie
+            ? `Round ${game.currentRound} was a tie! Score: ${newPlayer1Wins}-${newPlayer2Wins}`
+            : `Round ${game.currentRound}: ${roundWinner!.displayName || roundWinner!.username} wins with ${roundWinnerId === game.player1Id ? player1Hand.name : player2Hand.name}! Score: ${newPlayer1Wins}-${newPlayer2Wins}`;
+
+          await sendPushNotification(
+            game.player1Id,
+            "Poker Round Complete",
+            roundResultMessage,
+            "poker_round"
+          );
+          await sendPushNotification(
+            game.player2Id,
+            "Poker Round Complete",
+            roundResultMessage,
+            "poker_round"
+          );
+
+          const updatedGame = await storage.getPokerGame(gameId);
+          const completedRound = await storage.getPokerRound(round.id);
+          const allRounds = await storage.getPokerRoundsByGame(gameId);
+
+          return res.json({
+            game: updatedGame,
+            currentRound: newRound,
+            previousRound: completedRound,
+            rounds: allRounds,
+            roundComplete: true,
+            gameComplete: false,
+          });
+        }
+      } else {
+        const waitingFor = isPlayer1 ? game.player2Id : game.player1Id;
+        const readyPlayer = await storage.getUser(userId);
+        await sendPushNotification(
+          waitingFor,
+          "Poker: Opponent Ready",
+          `${readyPlayer!.displayName || readyPlayer!.username} is ready. Lock in your hand!`,
+          "poker_ready"
+        );
+
+        const currentGame = await storage.getPokerGame(gameId);
+        const currentRound = await storage.getPokerRound(round.id);
+        const allRounds = await storage.getPokerRoundsByGame(gameId);
+
+        return res.json({
+          game: currentGame,
+          currentRound,
+          rounds: allRounds,
+          roundComplete: false,
+          gameComplete: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error setting ready status:", error);
+      res.status(500).json({ message: "Failed to set ready status" });
+    }
+  });
+
+  // Get poker game history
+  app.get("/api/poker/games", requireAuth, async (req, res) => {
+    try {
+      const userId = getCurrentUserId(req)!;
+      const games = await storage.getPokerGames(userId);
+      res.json(games);
+    } catch (error) {
+      console.error("Error getting poker games:", error);
+      res.status(500).json({ message: "Failed to get games" });
+    }
+  });
+
   const httpServer = createServer(app);
   console.log("🚀 HTTP server created successfully");
   return httpServer;

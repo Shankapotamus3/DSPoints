@@ -130,6 +130,41 @@ export const yahtzeeGames = pgTable("yahtzee_games", {
   completedAt: timestamp("completed_at"),
 });
 
+export const pokerGames = pgTable("poker_games", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  player1Id: varchar("player1_id").notNull().references(() => users.id),
+  player2Id: varchar("player2_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("active"), // 'active', 'completed'
+  player1Wins: integer("player1_wins").notNull().default(0),
+  player2Wins: integer("player2_wins").notNull().default(0),
+  currentRound: integer("current_round").notNull().default(1),
+  winnerId: varchar("winner_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  completedAt: timestamp("completed_at"),
+});
+
+export const pokerRounds = pgTable("poker_rounds", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gameId: varchar("game_id").notNull().references(() => pokerGames.id),
+  roundNumber: integer("round_number").notNull(),
+  status: text("status").notNull().default("dealing"), // 'dealing', 'drawing', 'complete'
+  deckSeed: text("deck_seed").notNull(), // Seed for reproducible shuffle
+  player1Cards: text("player1_cards").notNull().default("[]"), // JSON array of 7 card strings
+  player2Cards: text("player2_cards").notNull().default("[]"), // JSON array of 7 card strings
+  player1DiscardIndices: text("player1_discard_indices"), // JSON array of indices to discard (0-6)
+  player2DiscardIndices: text("player2_discard_indices"), // JSON array of indices to discard (0-6)
+  player1Ready: boolean("player1_ready").notNull().default(false),
+  player2Ready: boolean("player2_ready").notNull().default(false),
+  player1BestHand: text("player1_best_hand"), // JSON array of 5 cards forming best hand
+  player2BestHand: text("player2_best_hand"), // JSON array of 5 cards forming best hand
+  player1HandRank: text("player1_hand_rank"), // Description like "Full House"
+  player2HandRank: text("player2_hand_rank"),
+  winnerId: varchar("winner_id").references(() => users.id),
+  isTie: boolean("is_tie").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  completedAt: timestamp("completed_at"),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   points: true,
@@ -224,6 +259,18 @@ export const insertYahtzeeGameSchema = createInsertSchema(yahtzeeGames).omit({
   completedAt: true,
 });
 
+export const insertPokerGameSchema = createInsertSchema(pokerGames).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+export const insertPokerRoundSchema = createInsertSchema(pokerRounds).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
 export const choreApprovalSchema = z.object({
   comment: z.string().optional(),
 });
@@ -270,6 +317,10 @@ export type InsertLotteryTicket = z.infer<typeof insertLotteryTicketSchema>;
 export type LotteryTicket = typeof lotteryTickets.$inferSelect;
 export type InsertYahtzeeGame = z.infer<typeof insertYahtzeeGameSchema>;
 export type YahtzeeGame = typeof yahtzeeGames.$inferSelect;
+export type InsertPokerGame = z.infer<typeof insertPokerGameSchema>;
+export type PokerGame = typeof pokerGames.$inferSelect;
+export type InsertPokerRound = z.infer<typeof insertPokerRoundSchema>;
+export type PokerRound = typeof pokerRounds.$inferSelect;
 export type ChoreApproval = z.infer<typeof choreApprovalSchema>;
 export type PointAdjustment = z.infer<typeof pointAdjustmentSchema>;
 export type ChoreCompletion = z.infer<typeof choreCompletionSchema>;
@@ -279,3 +330,5 @@ export type ChoreStatus = 'pending' | 'completed' | 'approved' | 'rejected';
 export type NotificationType = 'chore_completed' | 'chore_approved' | 'chore_rejected';
 export type AvatarType = 'emoji' | 'image';
 export type YahtzeeGameStatus = 'active' | 'completed';
+export type PokerGameStatus = 'active' | 'completed';
+export type PokerRoundStatus = 'dealing' | 'drawing' | 'complete';

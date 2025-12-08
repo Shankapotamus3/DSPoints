@@ -19,6 +19,10 @@ import {
   type InsertLotteryTicket,
   type YahtzeeGame,
   type InsertYahtzeeGame,
+  type PokerGame,
+  type InsertPokerGame,
+  type PokerRound,
+  type InsertPokerRound,
   type ChoreStatus,
   users,
   chores,
@@ -29,7 +33,9 @@ import {
   punishments,
   pushSubscriptions,
   lotteryTickets,
-  yahtzeeGames
+  yahtzeeGames,
+  pokerGames,
+  pokerRounds
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, or, and, desc, lte } from "drizzle-orm";
@@ -106,6 +112,20 @@ export interface IStorage {
   getYahtzeeGames(userId: string): Promise<YahtzeeGame[]>;
   createYahtzeeGame(game: InsertYahtzeeGame): Promise<YahtzeeGame>;
   updateYahtzeeGame(id: string, updates: Partial<YahtzeeGame>): Promise<YahtzeeGame | undefined>;
+
+  // Poker game methods
+  getCurrentPokerGame(userId: string): Promise<PokerGame | undefined>;
+  getPokerGame(id: string): Promise<PokerGame | undefined>;
+  getPokerGames(userId: string): Promise<PokerGame[]>;
+  createPokerGame(game: InsertPokerGame): Promise<PokerGame>;
+  updatePokerGame(id: string, updates: Partial<PokerGame>): Promise<PokerGame | undefined>;
+  
+  // Poker round methods
+  getPokerRound(id: string): Promise<PokerRound | undefined>;
+  getPokerRoundsByGame(gameId: string): Promise<PokerRound[]>;
+  getCurrentPokerRound(gameId: string): Promise<PokerRound | undefined>;
+  createPokerRound(round: InsertPokerRound): Promise<PokerRound>;
+  updatePokerRound(id: string, updates: Partial<PokerRound>): Promise<PokerRound | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -601,6 +621,106 @@ export class DatabaseStorage implements IStorage {
       .where(eq(yahtzeeGames.id, id))
       .returning();
     return game || undefined;
+  }
+
+  // Poker game methods
+  async getCurrentPokerGame(userId: string): Promise<PokerGame | undefined> {
+    const [game] = await db
+      .select()
+      .from(pokerGames)
+      .where(and(
+        or(
+          eq(pokerGames.player1Id, userId),
+          eq(pokerGames.player2Id, userId)
+        ),
+        eq(pokerGames.status, 'active')
+      ))
+      .orderBy(desc(pokerGames.createdAt))
+      .limit(1);
+    return game || undefined;
+  }
+
+  async getPokerGame(id: string): Promise<PokerGame | undefined> {
+    const [game] = await db
+      .select()
+      .from(pokerGames)
+      .where(eq(pokerGames.id, id));
+    return game || undefined;
+  }
+
+  async getPokerGames(userId: string): Promise<PokerGame[]> {
+    return await db
+      .select()
+      .from(pokerGames)
+      .where(or(
+        eq(pokerGames.player1Id, userId),
+        eq(pokerGames.player2Id, userId)
+      ))
+      .orderBy(desc(pokerGames.createdAt));
+  }
+
+  async createPokerGame(game: InsertPokerGame): Promise<PokerGame> {
+    const [pokerGame] = await db
+      .insert(pokerGames)
+      .values(game)
+      .returning();
+    return pokerGame;
+  }
+
+  async updatePokerGame(id: string, updates: Partial<PokerGame>): Promise<PokerGame | undefined> {
+    const [game] = await db
+      .update(pokerGames)
+      .set(updates)
+      .where(eq(pokerGames.id, id))
+      .returning();
+    return game || undefined;
+  }
+
+  // Poker round methods
+  async getPokerRound(id: string): Promise<PokerRound | undefined> {
+    const [round] = await db
+      .select()
+      .from(pokerRounds)
+      .where(eq(pokerRounds.id, id));
+    return round || undefined;
+  }
+
+  async getPokerRoundsByGame(gameId: string): Promise<PokerRound[]> {
+    return await db
+      .select()
+      .from(pokerRounds)
+      .where(eq(pokerRounds.gameId, gameId))
+      .orderBy(pokerRounds.roundNumber);
+  }
+
+  async getCurrentPokerRound(gameId: string): Promise<PokerRound | undefined> {
+    const [round] = await db
+      .select()
+      .from(pokerRounds)
+      .where(and(
+        eq(pokerRounds.gameId, gameId),
+        sql`${pokerRounds.status} != 'complete'`
+      ))
+      .orderBy(desc(pokerRounds.roundNumber))
+      .limit(1);
+    return round || undefined;
+  }
+
+  async createPokerRound(round: InsertPokerRound): Promise<PokerRound> {
+    const [pokerRound] = await db
+      .insert(pokerRounds)
+      .values(round)
+      .returning();
+    return pokerRound;
+  }
+
+  async updatePokerRound(id: string, updates: Partial<PokerRound>): Promise<PokerRound | undefined> {
+    const [round] = await db
+      .update(pokerRounds)
+      .set(updates)
+      .where(eq(pokerRounds.id, id))
+      .returning();
+    return round || undefined;
   }
 }
 
