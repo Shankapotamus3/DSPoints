@@ -2016,10 +2016,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const seed = generateRoundSeed();
       const { player1Cards, player2Cards } = dealCards(seed);
 
+      // Player 1 goes first in round 1 (odd rounds), player 2 in even rounds
       const round = await storage.createPokerRound({
         gameId: game.id,
         roundNumber: 1,
-        status: 'dealing',
+        status: 'first_player_turn',
+        firstPlayerId: userId, // Starter goes first in round 1
         deckSeed: seed,
         player1Cards: JSON.stringify(cardsToStrings(player1Cards)),
         player2Cards: JSON.stringify(cardsToStrings(player2Cards)),
@@ -2059,7 +2061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Player submits discard selection
+  // Player submits discard selection (turn-based: first player finishes, then second player sees their hand)
   app.post("/api/poker/discard", requireAuth, async (req, res) => {
     try {
       const userId = getCurrentUserId(req)!;
@@ -2088,56 +2090,261 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const round = await storage.getCurrentPokerRound(gameId);
-      if (!round || round.status !== 'dealing') {
-        return res.status(400).json({ message: "Not in drawing phase" });
+      if (!round) {
+        return res.status(404).json({ message: "No active round" });
       }
 
-      // Check if already submitted
-      const alreadySubmitted = isPlayer1 
-        ? round.player1DiscardIndices !== null 
-        : round.player2DiscardIndices !== null;
-      if (alreadySubmitted) {
-        return res.status(400).json({ message: "Already submitted discard selection" });
+      const isFirstPlayer = round.firstPlayerId === userId;
+      const isSecondPlayer = !isFirstPlayer;
+
+      // Validate it's the player's turn based on round status
+      if (round.status === 'first_player_turn') {
+        if (!isFirstPlayer) {
+          return res.status(400).json({ message: "It's the first player's turn" });
+        }
+      } else if (round.status === 'first_player_done') {
+        if (!isSecondPlayer) {
+          return res.status(400).json({ message: "It's the second player's turn" });
+        }
+      } else {
+        return res.status(400).json({ message: "Not in discard phase" });
       }
 
+      const { dealCards, stringsToCards, cardsToStrings, drawReplacementCards, findBestHand, compareHands, WINS_TO_WIN_GAME, generateRoundSeed } = await import('./poker.js');
+      const { remainingDeck } = dealCards(round.deckSeed);
+
+      // Get current player's card info
+      const currentCards = stringsToCards(JSON.parse(isPlayer1 ? round.player1Cards : round.player2Cards));
+      
+      // Calculate deck start index based on who has already drawn
+      let deckStartIndex = 0;
+      if (isSecondPlayer) {
+        // First player already drew, so skip their drawn cards
+        const firstPlayerIsP1 = round.firstPlayerId === game.player1Id;
+        const firstPlayerDiscards = firstPlayerIsP1 
+          ? JSON.parse(round.player1DiscardIndices || '[]') as number[]
+          : JSON.parse(round.player2DiscardIndices || '[]') as number[];
+        deckStartIndex = firstPlayerDiscards.length;
+      }
+
+      // Draw replacement cards
+      const newCards = drawReplacementCards(currentCards, discardIndices, remainingDeck, deckStartIndex);
+
+      // Update storage with new cards and discard indices
       const updateData: any = {};
       if (isPlayer1) {
+        updateData.player1Cards = JSON.stringify(cardsToStrings(newCards));
         updateData.player1DiscardIndices = JSON.stringify(discardIndices);
       } else {
+        updateData.player2Cards = JSON.stringify(cardsToStrings(newCards));
         updateData.player2DiscardIndices = JSON.stringify(discardIndices);
       }
 
-      await storage.updatePokerRound(round.id, updateData);
-
-      // Check if both players have submitted
-      const updatedRound = await storage.getPokerRound(round.id);
-      const p1Submitted = updatedRound!.player1DiscardIndices !== null;
-      const p2Submitted = updatedRound!.player2DiscardIndices !== null;
-
-      if (p1Submitted && p2Submitted) {
-        // Both submitted - draw new cards
-        const { dealCards, stringsToCards, cardsToStrings, drawReplacementCards } = await import('./poker.js');
-        
-        const { remainingDeck } = dealCards(updatedRound!.deckSeed);
-        
-        const p1Discards = JSON.parse(updatedRound!.player1DiscardIndices!) as number[];
-        const p2Discards = JSON.parse(updatedRound!.player2DiscardIndices!) as number[];
-        
-        const p1CurrentCards = stringsToCards(JSON.parse(updatedRound!.player1Cards));
-        const p2CurrentCards = stringsToCards(JSON.parse(updatedRound!.player2Cards));
-        
-        // Player 1 draws first, then player 2
-        const p1NewCards = drawReplacementCards(p1CurrentCards, p1Discards, remainingDeck, 0);
-        const p2NewCards = drawReplacementCards(p2CurrentCards, p2Discards, remainingDeck, p1Discards.length);
-        
-        await storage.updatePokerRound(round.id, {
-          status: 'drawing',
-          player1Cards: JSON.stringify(cardsToStrings(p1NewCards)),
-          player2Cards: JSON.stringify(cardsToStrings(p2NewCards)),
-        });
+      // Evaluate this player's best hand
+      const bestHand = findBestHand(newCards);
+      if (isPlayer1) {
+        updateData.player1BestHand = JSON.stringify(cardsToStrings(bestHand.cards));
+        updateData.player1HandRank = bestHand.name;
+        updateData.player1Ready = true;
+      } else {
+        updateData.player2BestHand = JSON.stringify(cardsToStrings(bestHand.cards));
+        updateData.player2HandRank = bestHand.name;
+        updateData.player2Ready = true;
       }
 
-      res.json({ success: true, bothSubmitted: p1Submitted && p2Submitted });
+      if (round.status === 'first_player_turn') {
+        // First player finished - reveal their hand to second player
+        updateData.status = 'first_player_done';
+        await storage.updatePokerRound(round.id, updateData);
+
+        // Notify second player it's their turn
+        const secondPlayerId = round.firstPlayerId === game.player1Id ? game.player2Id : game.player1Id;
+        const firstPlayer = await storage.getUser(round.firstPlayerId!);
+        await sendPushNotification(
+          secondPlayerId,
+          "Poker: Your Turn!",
+          `${firstPlayer!.displayName || firstPlayer!.username} has locked in their hand. Time to make your draw!`,
+          "poker_turn"
+        );
+
+        const updatedGame = await storage.getPokerGame(gameId);
+        const updatedRound = await storage.getPokerRound(round.id);
+        const allRounds = await storage.getPokerRoundsByGame(gameId);
+
+        return res.json({
+          game: updatedGame,
+          currentRound: updatedRound,
+          rounds: allRounds,
+          firstPlayerDone: true,
+          roundComplete: false,
+        });
+
+      } else {
+        // Second player finished - complete the round
+        await storage.updatePokerRound(round.id, updateData);
+        
+        // Now evaluate both hands and determine winner
+        const finalRound = await storage.getPokerRound(round.id);
+        const player1Cards = stringsToCards(JSON.parse(finalRound!.player1Cards));
+        const player2Cards = stringsToCards(JSON.parse(finalRound!.player2Cards));
+        
+        const player1Hand = findBestHand(player1Cards);
+        const player2Hand = findBestHand(player2Cards);
+        
+        const comparison = compareHands(player1Hand, player2Hand);
+        
+        let roundWinnerId: string | null = null;
+        let isTie = false;
+        
+        if (comparison > 0) {
+          roundWinnerId = game.player1Id;
+        } else if (comparison < 0) {
+          roundWinnerId = game.player2Id;
+        } else {
+          isTie = true;
+        }
+
+        await storage.updatePokerRound(round.id, {
+          status: 'complete',
+          winnerId: roundWinnerId,
+          isTie,
+          completedAt: new Date(),
+        });
+
+        let newPlayer1Wins = game.player1Wins;
+        let newPlayer2Wins = game.player2Wins;
+        
+        if (roundWinnerId === game.player1Id) {
+          newPlayer1Wins++;
+        } else if (roundWinnerId === game.player2Id) {
+          newPlayer2Wins++;
+        }
+
+        const player1 = await storage.getUser(game.player1Id);
+        const player2 = await storage.getUser(game.player2Id);
+
+        const gameComplete = newPlayer1Wins >= WINS_TO_WIN_GAME || newPlayer2Wins >= WINS_TO_WIN_GAME;
+        
+        if (gameComplete) {
+          const gameWinnerId = newPlayer1Wins >= WINS_TO_WIN_GAME ? game.player1Id : game.player2Id;
+          const gameWinner = gameWinnerId === game.player1Id ? player1 : player2;
+          const gameLoser = gameWinnerId === game.player1Id ? player2 : player1;
+          const winnerWins = gameWinnerId === game.player1Id ? newPlayer1Wins : newPlayer2Wins;
+          const loserWins = gameWinnerId === game.player1Id ? newPlayer2Wins : newPlayer1Wins;
+
+          await storage.updatePokerGame(gameId, {
+            player1Wins: newPlayer1Wins,
+            player2Wins: newPlayer2Wins,
+            status: 'completed',
+            winnerId: gameWinnerId,
+            completedAt: new Date(),
+          });
+
+          if (!gameWinner!.isAdmin) {
+            const pointsAwarded = winnerWins - loserWins;
+            if (pointsAwarded > 0) {
+              await storage.updateUserPoints(gameWinnerId, gameWinner!.points + pointsAwarded);
+              await storage.createTransaction({
+                userId: gameWinnerId,
+                type: 'earn',
+                amount: pointsAwarded,
+                description: `Poker win vs ${gameLoser!.displayName || gameLoser!.username} (${winnerWins}-${loserWins})`,
+              });
+            }
+          }
+
+          if (gameWinner!.isAdmin && !gameLoser!.isAdmin) {
+            await storage.createPunishment({
+              userId: gameLoser!.id,
+              number: Math.floor(Math.random() * 59) + 1,
+              text: `Lost Poker game to ${gameWinner!.displayName || gameWinner!.username} (${loserWins}-${winnerWins})`,
+              isCompleted: false,
+            });
+          }
+
+          await sendPushNotification(
+            game.player1Id,
+            "Poker Game Complete!",
+            `Game over! ${gameWinner!.displayName || gameWinner!.username} wins ${winnerWins}-${loserWins}!`,
+            "poker_complete"
+          );
+          await sendPushNotification(
+            game.player2Id,
+            "Poker Game Complete!",
+            `Game over! ${gameWinner!.displayName || gameWinner!.username} wins ${winnerWins}-${loserWins}!`,
+            "poker_complete"
+          );
+
+          const finalGame = await storage.getPokerGame(gameId);
+          const completedRound = await storage.getPokerRound(round.id);
+          const allRounds = await storage.getPokerRoundsByGame(gameId);
+
+          return res.json({
+            game: finalGame,
+            currentRound: completedRound,
+            rounds: allRounds,
+            roundComplete: true,
+            gameComplete: true,
+          });
+        } else {
+          // Start next round - alternate who goes first
+          await storage.updatePokerGame(gameId, {
+            player1Wins: newPlayer1Wins,
+            player2Wins: newPlayer2Wins,
+            currentRound: game.currentRound + 1,
+          });
+
+          const newSeed = generateRoundSeed();
+          const { player1Cards: newP1Cards, player2Cards: newP2Cards } = dealCards(newSeed);
+          
+          // Alternate first player: if current round had player1 first, next round player2 goes first
+          const nextFirstPlayerId = round.firstPlayerId === game.player1Id ? game.player2Id : game.player1Id;
+
+          const newRound = await storage.createPokerRound({
+            gameId: game.id,
+            roundNumber: game.currentRound + 1,
+            status: 'first_player_turn',
+            firstPlayerId: nextFirstPlayerId,
+            deckSeed: newSeed,
+            player1Cards: JSON.stringify(cardsToStrings(newP1Cards)),
+            player2Cards: JSON.stringify(cardsToStrings(newP2Cards)),
+            player1Ready: false,
+            player2Ready: false,
+            isTie: false,
+          });
+
+          const roundWinner = roundWinnerId ? (roundWinnerId === game.player1Id ? player1 : player2) : null;
+          const roundResultMessage = isTie
+            ? `Round ${game.currentRound} was a tie! Score: ${newPlayer1Wins}-${newPlayer2Wins}`
+            : `Round ${game.currentRound}: ${roundWinner!.displayName || roundWinner!.username} wins! Score: ${newPlayer1Wins}-${newPlayer2Wins}`;
+
+          await sendPushNotification(
+            game.player1Id,
+            "Poker Round Complete",
+            roundResultMessage,
+            "poker_round"
+          );
+          await sendPushNotification(
+            game.player2Id,
+            "Poker Round Complete",
+            roundResultMessage,
+            "poker_round"
+          );
+
+          const updatedGame = await storage.getPokerGame(gameId);
+          const completedRound = await storage.getPokerRound(round.id);
+          const allRounds = await storage.getPokerRoundsByGame(gameId);
+
+          return res.json({
+            game: updatedGame,
+            currentRound: newRound,
+            previousRound: completedRound,
+            rounds: allRounds,
+            roundComplete: true,
+            gameComplete: false,
+          });
+        }
+      }
     } catch (error) {
       console.error("Error submitting discard:", error);
       res.status(500).json({ message: "Failed to submit discard selection" });
