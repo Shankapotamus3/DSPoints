@@ -38,6 +38,7 @@ interface PokerRound {
   gameId: string;
   roundNumber: number;
   status: string;
+  firstPlayerId: string | null;
   player1Cards: string;
   player2Cards: string;
   player1DiscardIndices: string | null;
@@ -255,19 +256,31 @@ export default function PokerPage() {
     ? (isPlayer1 ? currentRound.player2HandRank : currentRound.player1HandRank)
     : null;
 
-  // Discard phase tracking
-  const inDiscardPhase = currentRound?.status === 'dealing';
-  const inDrawnPhase = currentRound?.status === 'drawing';
+  // Turn-based flow tracking
+  const isFirstPlayer = currentRound?.firstPlayerId === currentUser?.id;
+  const isSecondPlayer = currentRound && currentUser && !isFirstPlayer;
   
-  const myDiscardIndices = currentRound 
-    ? (isPlayer1 ? currentRound.player1DiscardIndices : currentRound.player2DiscardIndices)
+  const firstPlayerDone = currentRound?.status === 'first_player_done';
+  const isMyTurn = currentRound && (
+    (currentRound.status === 'first_player_turn' && isFirstPlayer) ||
+    (currentRound.status === 'first_player_done' && isSecondPlayer)
+  );
+  const isOpponentsTurn = currentRound && (
+    (currentRound.status === 'first_player_turn' && isSecondPlayer) ||
+    (currentRound.status === 'first_player_done' && isFirstPlayer)
+  );
+
+  // Get opponent's revealed hand if they're done (first player has finished)
+  const opponentHandRevealed = firstPlayerDone && isSecondPlayer;
+  const opponentRevealedCards = opponentHandRevealed && currentRound
+    ? JSON.parse(isPlayer1 ? currentRound.player2Cards : currentRound.player1Cards) as string[]
+    : [];
+  const opponentRevealedBestHand = opponentHandRevealed && currentRound
+    ? JSON.parse(isPlayer1 ? currentRound.player2BestHand! : currentRound.player1BestHand!) as string[]
+    : [];
+  const opponentRevealedHandRank = opponentHandRevealed && currentRound
+    ? (isPlayer1 ? currentRound.player2HandRank : currentRound.player1HandRank)
     : null;
-  const hasSubmittedDiscards = myDiscardIndices !== null;
-  
-  const opponentDiscardIndices = currentRound
-    ? (isPlayer1 ? currentRound.player2DiscardIndices : currentRound.player1DiscardIndices)
-    : null;
-  const opponentSubmittedDiscards = opponentDiscardIndices !== null;
 
   const toggleDiscard = (index: number) => {
     if (selectedDiscards.includes(index)) {
@@ -425,11 +438,67 @@ export default function PokerPage() {
         </Card>
       ) : (
         <>
+          {/* Turn indicator */}
+          <Card className={isMyTurn ? 'border-2 border-green-500' : isOpponentsTurn ? 'border-2 border-yellow-500' : ''}>
+            <CardContent className="py-3 text-center">
+              {isMyTurn ? (
+                <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
+                  <Check className="w-5 h-5" />
+                  <span className="font-medium">Your Turn - Select cards to discard</span>
+                </div>
+              ) : isOpponentsTurn ? (
+                <div className="flex items-center justify-center gap-2 text-yellow-600 dark:text-yellow-400">
+                  <Clock className="w-5 h-5" />
+                  <span className="font-medium">
+                    {firstPlayerDone ? "Waiting - You'll go next" : "Opponent is selecting discards..."}
+                  </span>
+                </div>
+              ) : roundComplete ? null : (
+                <div className="text-muted-foreground">Loading...</div>
+              )}
+              {!roundComplete && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  {isFirstPlayer ? "You go first this round" : "Opponent goes first this round"}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Opponent's revealed hand (shown when first player is done and it's second player's turn) */}
+          {opponentHandRevealed && (
+            <Card className="border-2 border-blue-500">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <span>Opponent's Final Hand</span>
+                  <Badge variant="secondary">Revealed</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap justify-center gap-2 mb-4">
+                  {opponentRevealedCards.map((card, index) => (
+                    <PlayingCard 
+                      key={index} 
+                      card={card}
+                      isHighlighted={opponentRevealedBestHand.includes(card)}
+                    />
+                  ))}
+                </div>
+                {opponentRevealedHandRank && (
+                  <div className="text-center">
+                    <Badge className="text-lg px-4 py-1 bg-blue-600">
+                      {opponentRevealedHandRank}
+                    </Badge>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">
                 Your Hand
-                {inDiscardPhase && !hasSubmittedDiscards && (
+                {isMyTurn && (
                   <span className="text-sm font-normal text-muted-foreground ml-2">
                     (Tap cards to discard: {selectedDiscards.length}/5)
                   </span>
@@ -444,7 +513,7 @@ export default function PokerPage() {
                     card={card} 
                     isHighlighted={roundComplete && myBestHand.includes(card)}
                     isSelected={selectedDiscards.includes(index)}
-                    isSelectable={inDiscardPhase && !hasSubmittedDiscards}
+                    isSelectable={!!isMyTurn}
                     onClick={() => toggleDiscard(index)}
                   />
                 ))}
@@ -456,7 +525,7 @@ export default function PokerPage() {
                   </Badge>
                 </div>
               )}
-              {inDiscardPhase && !hasSubmittedDiscards && (
+              {isMyTurn && (
                 <div className="text-center mt-4">
                   <Button
                     onClick={() => discardMutation.mutate({ gameId: game.id, discardIndices: selectedDiscards })}
@@ -464,16 +533,11 @@ export default function PokerPage() {
                     data-testid="button-submit-discards"
                   >
                     {discardMutation.isPending 
-                      ? "Submitting..." 
+                      ? "Locking In..." 
                       : selectedDiscards.length === 0 
-                        ? "Keep All Cards" 
-                        : `Discard ${selectedDiscards.length} Card${selectedDiscards.length > 1 ? 's' : ''}`}
+                        ? "Keep All Cards & Lock In" 
+                        : `Discard ${selectedDiscards.length} & Lock In`}
                   </Button>
-                </div>
-              )}
-              {inDiscardPhase && hasSubmittedDiscards && (
-                <div className="text-center text-muted-foreground">
-                  Waiting for opponent to select discards...
                 </div>
               )}
             </CardContent>
@@ -503,17 +567,17 @@ export default function PokerPage() {
                     </div>
                   )}
                 </>
-              ) : (
+              ) : !opponentHandRevealed ? (
                 <div className="flex flex-wrap justify-center gap-2">
                   {[...Array(7)].map((_, index) => (
                     <CardBack key={index} />
                   ))}
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
 
-          {roundComplete ? (
+          {roundComplete && (
             <Card className={`border-2 ${iWonRound ? 'border-green-500' : roundWasTie ? 'border-yellow-500' : 'border-red-500'}`}>
               <CardContent className="py-6 text-center">
                 <h3 className="text-xl font-bold mb-2">
@@ -524,38 +588,7 @@ export default function PokerPage() {
                 </p>
               </CardContent>
             </Card>
-          ) : inDrawnPhase ? (
-            <Card>
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    {iAmReady ? (
-                      <Check className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-yellow-500" />
-                    )}
-                    <span>You: {iAmReady ? 'Ready' : 'Not Ready'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span>Opponent: {opponentReady ? 'Ready' : 'Waiting'}</span>
-                    {opponentReady ? (
-                      <Check className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-yellow-500" />
-                    )}
-                  </div>
-                </div>
-                <Button
-                  onClick={() => readyMutation.mutate(game.id)}
-                  disabled={iAmReady || readyMutation.isPending}
-                  className="w-full"
-                  data-testid="button-poker-ready"
-                >
-                  {readyMutation.isPending ? "Locking In..." : iAmReady ? "Waiting for Opponent..." : "Lock In Hand"}
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+          )}
 
           {rounds.length > 1 && (
             <Card>
