@@ -156,8 +156,9 @@ Required for Railway deployment (documented in CLOUDINARY_SETUP.md):
 
 ## Game Mechanics
 - **Best of 19 Match**: First player to win 10 hands wins the entire game
-- **7-Card Draw**: Each player receives 7 cards and makes the best 5-card poker hand
-- **Simultaneous Play**: Both players lock in their hands, then results are revealed
+- **7-Card Draw**: Each player receives 7 cards and can discard 0-5 cards to draw replacements
+- **Alternating Turns**: Players take turns going first each round (Round 1: Player 1 first, Round 2: Player 2 first, etc.)
+- **Strategic Hand Reveal**: First player's final hand is revealed to second player before they make their discard decisions
 - **Round Progression**: New round starts automatically after each hand completes
 
 ## Hand Rankings (Highest to Lowest)
@@ -178,7 +179,8 @@ Required for Railway deployment (documented in CLOUDINARY_SETUP.md):
 - **Tie Rounds**: Neither player gets credit for the round; game continues
 
 ## Technical Implementation
-- **Database Schema**: `pokerGames` tracks overall game state (player wins, status), `pokerRounds` tracks individual hands (cards, ready status, results)
+- **Database Schema**: `pokerGames` tracks overall game state (player wins, status), `pokerRounds` tracks individual hands (cards, firstPlayerId, discard indices, results)
+- **Turn Flow Statuses**: `first_player_turn` → `first_player_done` → `complete` (second player sees first player's hand before deciding)
 - **Backend Logic**: `server/poker.ts` contains deck shuffling, card dealing, hand evaluation, and comparison algorithms
 - **Seeded Randomness**: Each round uses a unique seed for reproducible card shuffles
 - **Best Hand Detection**: Automatically finds the best 5-card combination from 7 cards using combinatorial analysis
