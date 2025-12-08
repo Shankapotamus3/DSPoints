@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Trophy, Users, Check, Clock, Spade, Heart, Diamond, Club, X } from "lucide-react";
@@ -117,6 +118,17 @@ export default function PokerPage() {
   const { toast } = useToast();
   const [selectedOpponent, setSelectedOpponent] = useState<string>("");
   const [selectedDiscards, setSelectedDiscards] = useState<number[]>([]);
+  const [showResultsDialog, setShowResultsDialog] = useState(false);
+  const [pendingRoundResult, setPendingRoundResult] = useState<{
+    myHand: string[];
+    myBestHand: string[];
+    myHandRank: string;
+    opponentHand: string[];
+    opponentBestHand: string[];
+    opponentHandRank: string;
+    iWon: boolean;
+    isTie: boolean;
+  } | null>(null);
 
   const { data: currentUser } = useQuery<User>({
     queryKey: ["/api/user"],
@@ -162,18 +174,39 @@ export default function PokerPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/poker/current"] });
       setSelectedDiscards([]);
-      if (data.bothSubmitted) {
-        toast({
-          title: "Cards Drawn!",
-          description: "Both players have drawn. Lock in your final hand!",
+      
+      if (data.roundComplete && data.currentRound) {
+        // Second player just finished - show results dialog
+        const round = data.currentRound;
+        const isP1 = game?.player1Id === currentUser?.id;
+        
+        const myHand = JSON.parse(isP1 ? round.player1Cards : round.player2Cards) as string[];
+        const myBestHand = JSON.parse(isP1 ? round.player1BestHand : round.player2BestHand) as string[];
+        const myHandRank = isP1 ? round.player1HandRank : round.player2HandRank;
+        const opponentHand = JSON.parse(isP1 ? round.player2Cards : round.player1Cards) as string[];
+        const opponentBestHand = JSON.parse(isP1 ? round.player2BestHand : round.player1BestHand) as string[];
+        const opponentHandRank = isP1 ? round.player2HandRank : round.player1HandRank;
+        
+        setPendingRoundResult({
+          myHand,
+          myBestHand,
+          myHandRank,
+          opponentHand,
+          opponentBestHand,
+          opponentHandRank,
+          iWon: round.winnerId === currentUser?.id,
+          isTie: round.isTie,
         });
+        setShowResultsDialog(true);
+      } else if (data.firstPlayerDone) {
+        toast({
+          title: "Hand Locked In!",
+          description: "Waiting for opponent to make their draw...",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/poker/current"] });
       } else {
-        toast({
-          title: "Waiting...",
-          description: "Waiting for opponent to select discards.",
-        });
+        queryClient.invalidateQueries({ queryKey: ["/api/poker/current"] });
       }
     },
     onError: (error: any) => {
@@ -630,6 +663,81 @@ export default function PokerPage() {
           )}
         </>
       )}
+
+      {/* Results Dialog for Second Player */}
+      <Dialog open={showResultsDialog} onOpenChange={setShowResultsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className={`text-center text-2xl ${
+              pendingRoundResult?.isTie 
+                ? 'text-yellow-600' 
+                : pendingRoundResult?.iWon 
+                  ? 'text-green-600' 
+                  : 'text-red-600'
+            }`}>
+              {pendingRoundResult?.isTie 
+                ? "It's a Tie!" 
+                : pendingRoundResult?.iWon 
+                  ? "You Won!" 
+                  : "You Lost"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {pendingRoundResult && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium text-muted-foreground mb-2">Your Final Hand</h4>
+                <div className="flex flex-wrap justify-center gap-1">
+                  {pendingRoundResult.myHand.map((card, index) => (
+                    <PlayingCard 
+                      key={index} 
+                      card={card}
+                      isHighlighted={pendingRoundResult.myBestHand.includes(card)}
+                    />
+                  ))}
+                </div>
+                <div className="text-center mt-2">
+                  <Badge variant="outline" className="px-3 py-1">
+                    {pendingRoundResult.myHandRank}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-muted-foreground mb-2">Opponent's Hand</h4>
+                <div className="flex flex-wrap justify-center gap-1">
+                  {pendingRoundResult.opponentHand.map((card, index) => (
+                    <PlayingCard 
+                      key={index} 
+                      card={card}
+                      isHighlighted={pendingRoundResult.opponentBestHand.includes(card)}
+                    />
+                  ))}
+                </div>
+                <div className="text-center mt-2">
+                  <Badge variant="outline" className="px-3 py-1">
+                    {pendingRoundResult.opponentHandRank}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button 
+              onClick={() => {
+                setShowResultsDialog(false);
+                setPendingRoundResult(null);
+                queryClient.invalidateQueries({ queryKey: ["/api/poker/current"] });
+              }}
+              className="w-full"
+              data-testid="button-acknowledge-result"
+            >
+              Continue to Next Round
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
