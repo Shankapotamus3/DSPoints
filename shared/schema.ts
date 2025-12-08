@@ -147,7 +147,8 @@ export const pokerRounds = pgTable("poker_rounds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   gameId: varchar("game_id").notNull().references(() => pokerGames.id),
   roundNumber: integer("round_number").notNull(),
-  status: text("status").notNull().default("dealing"), // 'dealing', 'drawing', 'complete'
+  status: text("status").notNull().default("first_player_turn"), // 'first_player_turn', 'first_player_done', 'second_player_turn', 'complete'
+  firstPlayerId: varchar("first_player_id").references(() => users.id), // Who goes first this round (alternates)
   deckSeed: text("deck_seed").notNull(), // Seed for reproducible shuffle
   player1Cards: text("player1_cards").notNull().default("[]"), // JSON array of 7 card strings
   player2Cards: text("player2_cards").notNull().default("[]"), // JSON array of 7 card strings
