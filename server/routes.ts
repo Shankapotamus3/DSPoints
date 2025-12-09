@@ -1959,6 +1959,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== POKER ROUTES ====================
 
+  // Temporary migration endpoint for Railway - adds firstPlayerId column
+  app.post("/api/poker/migrate", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      await db.execute(sql`ALTER TABLE poker_rounds ADD COLUMN IF NOT EXISTS first_player_id VARCHAR`);
+      res.json({ success: true, message: "Migration completed: first_player_id column added" });
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      res.status(500).json({ message: error.message || "Migration failed" });
+    }
+  });
+
   // Get current poker game
   app.get("/api/poker/current", requireAuth, async (req, res) => {
     try {
