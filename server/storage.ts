@@ -48,6 +48,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   updateUserPoints(id: string, points: number): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
   
   // Chore methods
   getChores(): Promise<Chore[]>;
@@ -168,6 +169,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user || undefined;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    // Delete related data first (foreign key constraints)
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, id));
+    await db.delete(notifications).where(eq(notifications.userId, id));
+    await db.delete(transactions).where(eq(transactions.userId, id));
+    await db.delete(lotteryTickets).where(eq(lotteryTickets.userId, id));
+    // Delete the user
+    const result = await db.delete(users).where(eq(users.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Chore methods

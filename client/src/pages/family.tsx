@@ -1,12 +1,22 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Users, UserCircle, Crown, Edit, Shield, ShieldOff, Coins } from "lucide-react";
+import { Plus, Users, UserCircle, Crown, Edit, Shield, ShieldOff, Coins, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import AddFamilyMemberModal from "@/components/add-family-member-modal";
@@ -18,6 +28,7 @@ export default function Family() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [adjustingPointsUser, setAdjustingPointsUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const { toast } = useToast();
 
   const { data: users = [], isLoading } = useQuery<User[]>({
@@ -69,6 +80,32 @@ export default function Family() {
     
     toggleAdminMutation.mutate({ userId, isAdmin: !currentAdminStatus });
   };
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("DELETE", `/api/users/${userId}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete user");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Member Removed",
+        description: "Family member has been removed successfully.",
+      });
+      setDeletingUser(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove family member",
+        variant: "destructive",
+      });
+    },
+  });
 
   const isCurrentUserAdmin = currentUser?.isAdmin || false;
 
@@ -204,16 +241,28 @@ export default function Family() {
                       </div>
                     )}
                     
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => setEditingUser(user)}
-                      data-testid={`button-edit-user-${user.id}`}
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit Profile
-                    </Button>
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingUser(user)}
+                        data-testid={`button-edit-user-${user.id}`}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit Profile
+                      </Button>
+                      {isCurrentUserAdmin && user.id !== currentUser?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={() => setDeletingUser(user)}
+                          data-testid={`button-delete-user-${user.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -242,6 +291,28 @@ export default function Family() {
           user={adjustingPointsUser}
         />
       )}
+
+      <AlertDialog open={!!deletingUser} onOpenChange={(open) => !open && setDeletingUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Family Member</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove {deletingUser?.displayName || deletingUser?.username}? 
+              This will delete their account and all associated data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deletingUser && deleteUserMutation.mutate(deletingUser.id)}
+              disabled={deleteUserMutation.isPending}
+            >
+              {deleteUserMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
